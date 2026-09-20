@@ -61,10 +61,21 @@ git clone https://github.com/DeerLuuu/deer-ui.git deer-ui && cd deer-ui && npm c
    node --input-type=module -e "import('deer-ui').then(m=>console.log(Object.keys(m).length))"   # → 30
    ```
 
+   ⚠️ **运行期两条路都通，但 TypeScript 消费者目前只支持 ESM / bundler 解析**：`exports` 的 `types`
+   条件**不区分模块格式**，四个入口命中的都是 ESM 树的 `./dist/*.d.ts`，而它被 `dist/package.json` 的
+   `"type": "module"` 判成 **ESM 声明**——`dist/cjs/` 里既没有 `.d.ts` 也没有 `.d.cts`。实测
+   （t2 单变量实验 + t7 独立复现，见 `docs/WAVE-C-closeout.md` §F1）：node16 + **CJS** 工程
+   `import { Dialog } from "deer-ui/kit"` → **TS1479**；`import kit = require("deer-ui/kit")` → **TS1471**；
+   **node10** 解析 → **TS2307**（根 `package.json` 没有顶层 `types` 兜底）；node16 的 **ESM** 工程与
+   **bundler** 工程 → exit 0。修法是**加法**（按格式分流 `types` + 补 `.d.cts`，不需要回滚双格式），
+   但它被 `check-dist` 的「`types` 必须排第一」判据挡住，属下一轮，见「已知缺口」。
+
    ⚠️ **一个应用只用一种格式**：`tooltip` / `pcmode` 是模块级单例，CJS 与 ESM 各有一份实例，
-   混用会让订阅表分裂、长按提示**静默消失**。检测办法：
-   `require('deer-ui/kit').setKitPcMode === (await import('deer-ui/kit')).setKitPcMode` 为 `false` 即中招。
-   打包器不会混用；只有同一工程里既有 `require` 又有 `import` 同一子入口时才需要留意。
+   混用会让订阅表分裂、长按提示**静默消失**。**没有可靠的运行期自检**：两棵树的 `setKitPcMode`
+   本来就**必然**是两个实例，所以 `require('deer-ui/kit').setKitPcMode === (await import('deer-ui/kit')).setKitPcMode`
+   在**纯 CJS 宿主与纯 ESM 宿主里都返回 `false`** —— 它区分不了「混用 / 没混用」，照它自检会**永远报警**
+   （实测见 `docs/WAVE-C-closeout.md` §F2）。约束放在**应用侧**：一个工程只用一种格式，或把打包器的
+   `resolve.conditionNames` 钉成只剩 `import`、或只剩 `require`。
 3. **样式是最先加载的**：库段必须在应用自己的样式表**之前**引入。同优先级的选择器**后写的赢**；
    反过来的话，应用想覆写库的令牌/基础规则就得靠提高选择器权重。
 
@@ -225,7 +236,7 @@ npm run typecheck      # tsc -p tsconfig.json --noEmit（src，strict: true）
                        #   && tsc -p tsconfig.examples.json（示范页，它不在 src 里）
 npm run build          # 两遍 tsc：ESM + .d.ts 进 dist/，CJS 进 dist/cjs/（逐文件，无 bundler）
                        #   && node scripts/build-styles.mjs → dist/styles.css（打印字节数/规则数）
-npm test               # 编译 tests/ 到 tests/.ts-out 后运行；末两行是 assertions: 143 / ALL PASS
+npm test               # 编译 tests/ 到 tests/.ts-out 后运行；末两行是 assertions: 222 / ALL PASS
 npm run snapshot:barrel # 导出面**有意**变化时更新快照（必须连同提交信息一起说明）
 npm run check:dist     # 构建产物自检（CI 在 build 之后跑）
 npm pack               # 出 deer-ui-0.1.0.tgz（prepack 会先 build + check:dist）
@@ -245,7 +256,7 @@ src/styles/tokens.css   设计令牌（:root + [data-theme="light"]）
 src/styles/kit.css      只属于 kit 的控件规则
 examples/demo.tsx       dev-only 示范页（不进 barrel / files / dist）
 scripts/                tsc 查找、样式拼接、dist 自检、打包、离线应急
-tests/                  A0 三条判据（A0-1/A0-3 带自检段）+ 控件 DOM 契约 + 样式归属 + 预算闸门
+tests/                  A0 三条判据（三条都带自检段；A0-3 同时覆盖 CSS）+ 控件 DOM 契约 + 12 个零断言符号的直接断言（范围 C）+ 样式归属 + 预算闸门
 tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显式更新）
 ```
 
@@ -254,17 +265,21 @@ tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显
 | 判据 | 断言名 | 内容 |
 |---|---|---|
 | A0-1 纯度白名单 | `kit.purity.offenders` | `src/**` 只许依赖 `react` / `react-dom` 家族与**库内相对路径**；相对路径必须解析得到、且**不得越出 `src/`** |
-| A0-2 导出面快照 | `kit.barrel.surface` / `kit.barrel.entry.*` / `kit.barrel.reexport-only` / `kit.barrel.css-entry` | 按 `exports` 逐入口把导出面**逐符号快照**成 JSON；入口文件只许 re-export；非 JS 入口单独一条判据 |
-| A0-3 不得自判 PC / 主题 / 安全区 | `kit.pcmode.pushed-not-detected` / `kit.theme.host-owned` / `kit.safearea.host-owned` / `kit.host.no-storage` | 禁**判定性调用**：`matchMedia` 带 `pointer:` / `hover:` / `prefers-color-scheme`、写 `data-pc` / `data-theme`、写 `--sat/--sab/--sal/--sar`、`localStorage`/`sessionStorage` 全禁。**允许** `window.innerWidth/innerHeight` 的测量用法与 `(orientation: landscape)` 这类布局查询 |
+| A0-2 导出面快照 | `kit.barrel.surface` / `kit.barrel.entry.*` / `kit.barrel.root-union` / `kit.barrel.selfcheck.*` / `kit.barrel.reexport-only` / `kit.barrel.css-entry` | 按 `exports` 逐入口把导出面**逐符号快照**成 JSON；入口文件只许 re-export；非 JS 入口单独一条判据。**值 / 类型分开记**，所以 `export type * from "…"` 也在射程内（`reStar` 带 `(type\s+)?` 捕获）；`root-union` 另钉「根入口 = 全部 JS 入口的并集」 |
+| A0-3 不得自判 PC / 主题 / 安全区 | `kit.pcmode.pushed-not-detected` / `kit.theme.host-owned` / `kit.safearea.host-owned` / `kit.host.no-storage` / `kit.host.css-*` | 禁**判定性调用**：`matchMedia` 带 `pointer:` / `hover:` / `prefers-color-scheme`、写 `data-pc` / `data-theme`、写 `--sat/--sab/--sal/--sar`、`localStorage`/`sessionStorage` 全禁。**允许** `window.innerWidth/innerHeight` 的测量用法与 `(orientation: landscape)` 这类布局查询。`kit.host.css-*` 四条把同一套口径扩到**样式源** `src/styles/*.css`（暗色媒体查询 / `@media` / `--sa*` 赋值 / `[data-theme]` 选择器） |
 
-三条判据里 **A0-1 与 A0-3 带自检段**（把合成样本喂给扫描函数，断言「该抓的抓住、该放过的放过」）——
+三条判据**都有自检段**（把合成样本喂给扫描函数，断言「该抓的抓住、该放过的放过」）——
 **空库上判据也不是恒真**的，判据本身被改坏会被自己的自检抓住。扫描前会去掉注释（保留行号），
-所以「注释里提了一句 `localStorage`」不会误报。
+所以「注释里提了一句 `localStorage`」不会误报。A0-3 的自检段**同时覆盖 CSS 侧**（`src/styles/*.css`
+的判定性写法：暗色媒体查询 / `@media` / `--sa*` 赋值 / `[data-theme]` 选择器），
+「该放过的放过」那两条（`:root{--sat:env(…)}` 的合法兜底声明与 `var(--sat)` 的引用）是刻意留的 ——
+谁把它改成「见 `--sa*` 就红」，它们立刻变红。
 
-> ⚠️ **A0-2 没有自检段，而且它认不出类型级再导出**：`tests/scan.ts` 的 re-export 正则只匹配裸
-> `export * from "…"`（以及 `export * as ns from "…"`），`export type * from "…"` 这种**类型级**再导出
-> 既不进快照、也不被判据看见。所以「公开导出面冻结」这条不变量目前有一个**已知可见性缺口**：
-> 用 `export type * from` 往公开面里塞类型，不会有任何断言变红（登记见 `CHANGELOG.md` 的「本轮登记但不实施」F-4）。
+> **A0-2 的类型级可见性已修**（范围 C）：`tests/scan.ts` 的 `reStar` 现在带 `(type\s+)?` 捕获，
+> `export type * from "…"` 与 `export type * as ns from "…"` 都进导出面（前者只并入**类型**集合，
+> 后者把 `ns` 并入类型集合）。修复前的反例是：往 `src/kit/index.ts` 加一行 `export type * from "./secret"`
+> 后 `npm test` 仍 `143 / ALL PASS`（那是修复前的计数）、快照逐字节不变，而公开类型面确实多了一个符号。
+> A0-1 的**说明符收集**同步补齐（`export type { A } from "…"` 这类也会被收进依赖图判定）。
 
 **示范页为什么不需要豁免**：`examples/demo.tsx` 是 dev-only 示范页，它自己 `createRoot` 挂载、自己切
 `data-theme` —— 那是**宿主**的活。它被放在 `src/` **之外**，而 A0-3 只扫 `src/**`；
@@ -276,13 +291,13 @@ tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显
 
 | 项 | 现值 | 预算下限 | 说明 |
 |---|---|---|---|
-| `ui.*` 控件契约（DOM 契约 + 源码级 / 生命周期级判据） | **71** | **62** | 其中 62 条是从宿主逐字搬来的 DOM 契约（名字一条没改、条件一条没削），9 条是为本轮三条已确认 bug 补的回归断言与同族护栏 |
-| `kit.*` + `lib.*`（A0-1/2/3 + 测试基建 + 样式归属 + 预算闸门） | **72** | **72** | 库自己的判据与基建 |
-| **运行期断言合计**（= `npm test` 末行 `assertions:`） | **143** | **134** | 71 + 72 与 62 + 72；只许涨 |
+| `ui.*` 控件契约（DOM 契约 + 源码级 / 生命周期级判据） | **117** | **62** | 其中 62 条是从宿主逐字搬来的 DOM 契约（名字一条没改、条件一条没削），9 条是范围 B 三条已确认 bug 的回归断言与同族护栏，46 条是范围 C 为 12 个零断言符号（+ BUG-5 判据）补的直接断言 |
+| `kit.*` + `lib.*`（A0-1/2/3 + 测试基建 + 样式归属 + 预算闸门） | **105** | **72** | 库自己的判据与基建；范围 C 的 A0 加固新增 33 条（A0-2 13 + A0-1 说明符自检 5 + A0-3 CSS 15） |
+| **运行期断言合计**（= `npm test` 末行 `assertions:`） | **222** | **134** | 117 + 105 与 62 + 72；只许涨 |
 
 `tests/budget.test.ts` 钉的是**库自己的两个下限**（`ui.*` ≥ 62 与 `kit.*`+`lib.*` ≥ 72，**分开判** ——
 总数会掩盖「基建长胖、控件契约变少」）。下限**不跟着现值涨**：涨停的下限会在下一次正常加断言时逼人改闸门，
-也就失去了「只许涨」的告警意义（本轮 134 → 143，三道下限一处没动）。
+也就失去了「只许涨」的告警意义（范围 B 134 → 143、范围 C 143 → 222，三道下限一处没动）。
 
 ### 测试基建的三处有意选择
 
@@ -294,6 +309,8 @@ tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显
    本轮为 effect 生命周期又加了一个**极小的 effect 运行器**（`tests/ui-hooks.test.tsx`）：在
    `renderToStaticMarkup` + `tests/dom-stub.ts` 之上手动跑 effect 与它返回的 cleanup，
    **仍然不是渲染器**（不解析布局、不派发 React 合成事件），也**不引 jsdom**；用完必须还原。
+   范围 C 又把它的计时器桩从「当场执行、返回 `0`」改成「返回**不执行**的 id + `pending` / `cleared` 记账」——
+   没有这个改动，「按下后 380ms 未到点就卸载必须 `clearTimeout`」这条判据（BUG-5）不可判。
 3. `src` 用 `strict: true`、`tests` 用 `strict: false`。两处都写死 `"jsx": "react-jsx"`。
 
 ## 这个版本验证到了哪一步
@@ -303,10 +320,13 @@ tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显
 | 命令 | 结果 |
 |---|---|
 | `npm run typecheck` | exit 0（src strict + 示范页） |
-| `npm test` | `assertions: 143` / `ALL PASS`（预算下限 134 = 62 + 72，未动） |
+| `npm test` | `assertions: 222` / `ALL PASS`（预算下限 134 = 62 + 72，未动） |
 | `npm run build` | `dist/` **39 个文件**（ESM 树 + `dist/cjs/` CJS 树，两棵树各带作用域 `package.json`）；`styles.css` **17,790 B / 92 条规则** |
 | `npm run check:dist` | OK |
-| 原生加载 | `require('deer-ui')` → 30 个导出；`import('deer-ui')` → 30 个导出；`require('deer-ui/kit')` → 25 |
+| 原生加载 | `require('deer-ui')` → 30 个导出；`import('deer-ui')` → 30 个导出；`require('deer-ui/kit')` → 25；`deer-ui/tabs` → 2；`deer-ui/tooltip` → 3 |
+
+> 范围 C 的逐条完成项、证据等级（哪些结论只有一方证据、哪些经过独立验证）与下一轮入口见
+> [`docs/WAVE-C-closeout.md`](docs/WAVE-C-closeout.md)。
 
 **其中一部分有公网机器判据**：GitHub Actions 工作流 `ci`（`.github/workflows/ci.yml`）在
 `master` 上跑过并 `success`。⚠️ 截至 **`9fa9de3` 为止全仓库只触发过 1 次运行** —— 此前工作流文件
@@ -324,20 +344,34 @@ CI 里**没有、也不需要**任何宿主仓库在场 —— 这正是「库�
 ## 已知缺口（别让它们消失）
 
 - **令牌是超集**（143 定义 / 34 被库引用）：见「样式与令牌」，收敛是一次有意的改动。
-- **公开组件零直接断言的不止两个**：实测是 **12 个** —— `Keep` · `TipHost` · `useBlankTap` ·
-  `useLandscape` · `TabBar` · `showTip` · `hideTip` · `subscribeTip` · `setKitPcMode` · `kitPcOn` ·
-  `useKitPcMode` · `useHoverTipsEnabled`。（更早的盘点列出 14 个，含 `Overlay` 与 `DropMenu`；
-  那两个在本轮修 BUG-1 时已补上断言：`ui.overlay-full` 与 3 条 `ui.dropmenu.*`。）
-  `ScrubNum` 的键盘 / 指针路径、`tabs` 的滚动 / portal 行为**没有黄金 md5 兜底**。当前的行为保证来自
+- ~~公开组件零直接断言~~ **范围 C 已补齐（不再是缺口）**：12 个符号各自有名字含符号语义的直接断言，
+  共新增 46 条 `ui.*`（逐符号清单见 [`docs/WAVE-C-closeout.md`](docs/WAVE-C-closeout.md) §1.1）。
+  `Overlay`（`ui.overlay-full`）与 `DropMenu`（3 条 `ui.dropmenu.*`）在范围 B 修 BUG-1 时已补断言，
+  **不在这 12 个里、也没有被重复计算**。仍然成立的**局部**限制：`ScrubNum` 的键盘路径、
+  `tabs` 的滚动 / portal 行为**没有黄金 md5 兜底**。当前的行为保证来自
   「源码与宿主 HEAD 逐字节同一 + `dist` 是 `src` 的忠实产物 + 注入负例」，证不到这几处细节。
-- **公开导出面判据对类型级再导出不可见**：`tests/scan.ts` 的 `reStar` 只匹配裸 `export * from`，
-  识别不了 `export type * from "…"`。后果：往 `src/kit/index.ts` 加一行 `export type * from "./secret"`
-  再跑 `snapshot:barrel`，会 `ALL PASS` 而快照不变，但消费者能 `import type { SecretApi } from "deer-ui/kit"`
-  成功。**A0-2 也是三条 A0 判据里唯一没有自检段的**。修法与已验证的补丁草稿见
-  [`docs/NEXT-round-B.md`](docs/NEXT-round-B.md) §1。
+- ~~公开导出面判据对类型级再导出不可见~~ **范围 C 已修（不再是缺口）**：`tests/scan.ts` 的 `reStar`
+  现在带 `(type\s+)?` 捕获，`export type * from "…"` 与 `export type * as ns from "…"` 都进导出面
+  （前者只并入**类型**集合，后者把 `ns` 并入类型集合）；A0-2 也补上了自检段（此前是三条 A0 判据里
+  唯一没有的）。落地记录与差分证据见 [`docs/WAVE-C-closeout.md`](docs/WAVE-C-closeout.md) §1（C-1…C-4）。
 - **混用两种模块格式会让单例分裂**：见上文「三条硬要求」第 2 条。`tooltip` / `pcmode` 是模块级单例，
   CJS 与 ESM 是两份实例，同一工程里混用同一子入口会让长按提示**静默消失**（无任何报错）。
-  库侧目前没有运行时检测，只有上面那条 `===` 比较可以自检。
+  库侧**没有**运行时检测：先前写在这里的 `===` 自检式**恒为 `false`**（纯 CJS 宿主与纯 ESM 宿主
+  实测都报警），已按实测删除，改成应用侧约束（一个工程只用一种格式 / 钉 `conditionNames`）。
+- **CJS 的 TypeScript 消费者拿不到类型**（范围 C 补审发现，**本轮未修**）：`exports` 的 `types` 条件
+  不区分模块格式，命中的是 ESM 树的 `.d.ts`，`dist/cjs/` 里没有 `.d.ts` / `.d.cts`。实测
+  node16 + CJS 工程 `import` → **TS1479**、`import x = require()` → **TS1471**、node10 → **TS2307**；
+  ESM / bundler 工程 exit 0。修法是加法（按格式分流 `types` + 补 `.d.cts`），但**必须同时放宽下面
+  那条 `check-dist` 判据**，否则改完过不了 `check:dist`。入口见
+  [`docs/WAVE-C-closeout.md`](docs/WAVE-C-closeout.md) §5.1。
+- **`check-dist` 的「`types` 必须排第一」判据挡住上面那条修法，且遇嵌套对象会崩**：
+  `scripts/check-dist.mjs:83-85` 只判 `Object.keys(cond)[0] !== "types"`（两级 `exports` 形状会被判失败）；
+  `:87-88` 对每个条件值直接 `path.join(libRoot, target)`，**没有字符串守卫** —— 注入一个对象值会
+  `TypeError`（脚本崩，不是判据红）。改法见 [`docs/WAVE-C-closeout.md`](docs/WAVE-C-closeout.md) §5.2
+  （与上一条**必须同一提交**）。
+- **`check-dist` 的两条判据偏弱**（范围 C 补审登记）：① CJS 树的相对 `require` 只认字面量
+  `require("./x.js")`，`require("./"+"primitives")` 这类拼接能全绿通过；② 「同入口 CJS/ESM 导出值一致」
+  比的是**排序后的名字集合**（`check-dist.mjs:193-194`），同名不同实现能过 —— 所以它**抓不到**单例分裂。
 - **无障碍只做了一半**：`Dialog` 有 `role="dialog"` + `aria-modal`，但**没有焦点陷阱、不开焦点、关闭后不归还焦点**；
   遮罩不是 portal；`TipHost` 的提示没有 `aria-live`。
 - **三端兼容（`file://` / 旧 WebView）只能静态守**：本机没有 Android 设备，不许以「已核」口吻写进度。
@@ -345,17 +379,22 @@ CI 里**没有、也不需要**任何宿主仓库在场 —— 这正是「库�
 - **发布面尚未定型**：不发 npm、不提供 sprite 资源（图标属宿主资源）。
 - **样式归属判据比它读起来弱**：`kit.styles.kit-classes-owned` 只证明 `kit.css` 里出现的 class
   在库源码的**字符串字面量**里出现过；一条注入了 `display:none` 的 `.dlg` 规则能过。类名拼错 / 规则漏写
-  目前**没有机器兜底**。
+  目前**没有机器兜底**。范围 C 新增的 `kit.host.css-*` 四条判的是 **CSS 侧的判定性写法**
+  （暗色媒体查询 / `@media` 白名单 / `--sa*` 赋值 / `[data-theme]` 选择器），与「class 是否漏写规则」
+  是两回事，不能互相替代。
 - **预算闸门钉的是断言「条数」不是覆盖率**：涨条数不会自动带来覆盖。实测过的作弊路径：
   「删 5 条真断言 + 插 5 条 `ui.filler`」能让 `assertions:` 与三道下限原值维持、闸门全绿。
   防它只能靠与 HEAD 版逐符号 diff 确认 `REMOVED=[]`（本轮就是这么复核的）。
 - **A0-1 的 `escape` 判定依赖目标文件真实存在**：`resolveSpec` 要 `existsSync`，所以一条指向**不存在**的
   库外路径（如 `../../engine/expr.js`）会被判 `unresolved` 而不是 `escape`。判据仍会红（`offenders` 非空），
   但归因会不准；这是既有行为，不是双格式改造引入的。
-- **`tests/budget.test.ts:24` 的注释是一处过期数字**：写「新增 7 条（2+2+4）」，实测是 **+9**
-  （`ui-kit` 53 → 56 = +3：`ui.dropmenu.layout-effect-deps`、`ui.scrubnum.bounds-live`、
-  `ui.scrubnum.bounds-ref`；新文件 `ui-hooks` 6 条）。**闸门本身是对的** —— 三道下限 `134 / 62 / 72`
-  一行未动，错的只是那句注释的分解。
+- **`tests/budget.test.ts` 的历史分解注释仍有两处口径问题**（**闸门本身是对的** —— 三道下限
+  `134 / 62 / 72` 一行未动；`tests/**` 不在收尾任务的写权范围，故只登记）：
+  ① 现值停在范围 C 中途的 `143 → 176`，最终实测是 **222 = ui.\* 117 + kit.\*+lib.\* 105**；
+  ② 「`ui-kit` 53 → 56 = +3」的**绝对值整体偏 3** —— 实测「控件 DOM 契约」段是 **62 → 65**
+  （剔除其中 12 条 `ui.kit.*` 才是 50 → 53），**增量 +3 与所列三个断言名都是对的**
+  （出处 `docs/NEXT-round-B.md:127` / `docs/REQUIREMENTS-freeze-C.md:110`，逐字照抄）。
+  详见 [`docs/WAVE-C-closeout.md`](docs/WAVE-C-closeout.md) §5.3（V1）。
 - **lint / format 工具链完全缺失**：全仓库没有 ESLint / Prettier 配置，也没有 `npm run lint`
   （`src/kit/scrub.tsx` 里那句 `eslint-disable` 注解在本轮已删除）。引入时该加 `lint` / `format` /
   `format:check` 三条 script，并接进 `.github/workflows/ci.yml` 的 `npm ci` 之后、`typecheck` 之前。

@@ -14,6 +14,12 @@
 > | `node scripts/check-dist.mjs` | OK（25 个产物文件） |
 >
 > 以上五条**全绿**是本次「规范 + 修 bug」的**起点与终点**。任何一条变红 = 本轮失败。
+>
+> ⚠️ **本文件里的数字是范围 A/B 生成时（2026/9/20）的实测基线，不是现值** —— 范围 B 收尾后是
+> `assertions: 143` / `dist/` 39 个产物；范围 C 收尾后是 **`assertions: 222`**（= `ui.*` 117 +
+> `kit.*`+`lib.*` 105）、`dist/` 仍 39 个产物。现值与逐项对账见
+> [`docs/WAVE-C-closeout.md`](WAVE-C-closeout.md) 与 `README.md`。**本文件（范围 A/B 的冻结件）
+> 在范围 C 一字未改。**
 
 ---
 
