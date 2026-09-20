@@ -1,0 +1,13 @@
+# 行尾统一：**检出即 LF**（与平台无关），索引里的 blob 也一律 LF。
+#
+# 为什么需要它：本机（以及很多 Windows 环境）`core.autocrlf=true`，会把文本文件检出成 CRLF；
+# 而 `npm pack` 打的是**工作区**文件 —— 于是同一个 commit 在不同检出里打出的
+# `deerui-0.1.0.tgz` 会差出几十个 `\r`，bytes / md5 / sha256 全变。宿主把这三条指纹钉进了
+# `tests/ui-fork.test.ts`（VENDOR_BYTES/MD5/SHA256）与 lockfile 的 `integrity`，所以「照
+# README 重打一遍却对不上数」会被误当成自己操作错了。加了这条属性后：Linux/Windows、
+# 新克隆/老工作区打出来的 tarball **逐字节相同**。
+#
+# 唯一一行：`text=auto` 让 git 自行判断二进制（二进制不做转换），`eol=lf` 把文本一律写成 LF。
+# 不改写任何已跟踪 blob —— 索引里本来就是 LF（`git ls-files --eol` 里 `i/crlf` = 0），
+# 这条属性只影响**下一次检出/签出**写出的行尾。
+* text=auto eol=lf

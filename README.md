@@ -61,7 +61,7 @@ git clone <this-repo> deer-ui && cd deer-ui && npm ci
 > **文件名差一个连字符，别记错**：npm 的 tarball 名由**包名**决定（`deer-ui-0.1.0.tgz`）；
 > 面向宿主仓库时本仓库另有 `npm run pack:vendor`，产出的名字是 `deerui-0.1.0.tgz`（宿主的历史约定，
 > 例如 PixelCraft 的 `file:vendor/deerui-0.1.0.tgz`）。**两者是同一份包**（装完都是 `deer-ui/`，
-> 路径由 `package.json` 的 `exports` 决定，与文件名无关），`pack:vendor` 会打印 sha256。
+> 路径由 `package.json` 的 `exports` 决定，与文件名无关），`pack:vendor` 会打印三条指纹（见「打包可复现」）。
 
 三条要求：
 
@@ -181,6 +181,28 @@ import { TabBar, DropMenu } from "deer-ui/tabs";
 不归一就会让同一次提交在不同平台产出**字节不同**的 `dist/styles.css`，打出来的 tarball 也就不可复现。
 归一的是行尾，不是声明 —— 规则内容逐字节不变。
 
+### 打包可复现（`.gitattributes`）
+
+**库根有 `.gitattributes`，全文一行：`* text=auto eol=lf`** —— 它让**任何平台、任何一次克隆**检出的文本文件
+都是 LF。这条不是洁癖：`npm pack` / `npm run pack:vendor` 打的是**工作区文件的快照**，所以只要工作区行尾随
+平台变，同一个 commit 就会打出**不同的 tarball**（实测：没有这条属性时，Windows 克隆打出来 39,430 B，而 LF
+工作区 39,293 B，差异就是 `LICENSE` / `README.md` / `package.json` 里的 `\r`）。
+
+```sh
+# 跨检出复现性怎么验（两条路径各打一次，指纹必须逐字节相同）
+npm run pack:vendor                                   # ① 本工作区
+git clone <repo> /tmp/deer-ui && cd /tmp/deer-ui && npm ci && npm run pack:vendor   # ② 全新克隆
+```
+
+`scripts/pack-vendor.mjs` 里还有一道**打包后的行尾闸门**：逐个检查将要进包的文件，出现 CR 就直接失败
+（并删掉中间产物）—— 老检出（在这条属性之前克隆的）不会被自动改写，与其产出一个指纹对不上的包，
+不如在这里当场停下。闸门通过时它会打印进包文件数与三条指纹（bytes / md5 / sha256）。
+
+> **指纹钉的是「某一份确定内容」**：宿主 PixelCraft 把 `VENDOR_BYTES` / `VENDOR_MD5` / `VENDOR_SHA256`
+> 钉进 `tests/ui-fork.test.ts`，并把 sha512 写进 lockfile 的 `integrity`。这意味着
+> **库这边任何一次重新打包（哪怕只改一个字节：改注释、改 README、加一条规则）都会让那四条常量失效** ——
+> 换包时必须按上面的命令重打、把三个指纹与 `integrity` 一起对齐，别指望「同一版本号 = 同一份字节」。
+
 ### 归属与对账（怎么复核「没搬错」）
 
 `scripts/check-dist.mjs` 钉住产物本身：非空、`:root{` 与 `[data-theme="light"]{` **各恰好一次**、无重复规则、
@@ -236,7 +258,7 @@ npm test               # 编译 tests/ 到 tests/.ts-out 后运行；末两行�
 npm run snapshot:barrel  # 导出面**有意**变化时更新快照（必须连同提交信息一起说明）
 npm run check:dist     # 构建产物自检（CI 在 build 之后跑）
 npm pack               # 出 deer-ui-0.1.0.tgz（prepack 会先 build + check:dist）
-npm run pack:vendor    # 再落一份宿主约定的 deerui-0.1.0.tgz 并打印 sha256（见「安装」）
+npm run pack:vendor    # 再落一份宿主约定的 deerui-0.1.0.tgz，并打印进包文件数与 bytes/md5/sha256（见「安装」）
 ```
 
 **示范页**（dev-only，不进 `files` / 不进 `dist` / 库测试不渲染它）：`examples/demo.tsx` 一屏展示全部控件与变体、
@@ -390,8 +412,12 @@ npm run pack:vendor                  # → deerui-0.1.0.tgz（同时产出 npm �
 
 **行尾陷阱（实测）**：宿主仓库 `core.autocrlf=true` 且没有 `.gitattributes`，所以宿主**工作区**文件是 **CRLF**、
 而本仓库骨架阶段新建的文件是 LF。从宿主拷文件进来**不必手工转 LF**（`git add` 按 `text=auto` 归一成 LF 入库，
-与宿主 blob 一致），但**别拿两个工作区的字节直接比**（CRLF vs LF 会假红）。本仓库**生成的样式产物统一 LF**
-（见「库自带样式」）。
+与宿主 blob 一致），但**别拿两个工作区的字节直接比**（CRLF vs LF 会假红）。
+
+> 本仓库**从 2026-09-20 起有 `.gitattributes`（`* text=auto eol=lf`）**：检出即 LF，生成的样式产物也统一 LF ——
+> 打包产物因此与检出平台无关（见「打包可复现」）。注意那条属性**不会自动改写老工作区**：
+> 在它之前克隆出来的树里，从宿主拷来的那批文件仍是 CRLF（`git ls-files --eol` 的 `w/crlf`），
+> 重新 clone 一次才干净。这批文件是**源码**、不进 tarball，所以不影响打包指纹。
 
 **那处注释级残留已收掉（2026-09-20）**：`src/kit/primitives.tsx` 开头原来写着「实现住在宿主的 `src/ui/kit`，
 将来再搬出去」—— 那是搬运时的口径，现在已经反过来（**库是实现的唯一真相**，宿主只是消费者），
