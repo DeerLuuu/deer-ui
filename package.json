@@ -41,6 +41,7 @@
     "check:dist": "node scripts/check-dist.mjs",
     "pack:vendor": "node scripts/pack-vendor.mjs",
     "link:devdeps": "node scripts/link-dev-deps.mjs",
+    "prepare": "npm run build",
     "prepack": "npm run build && npm run check:dist"
   },
   "peerDependencies": {

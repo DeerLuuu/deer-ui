@@ -42,6 +42,22 @@ npm i ./deer-ui-0.1.0.tgz
 git clone <this-repo> deer-ui && cd deer-ui && npm ci
 ```
 
+**三条路都会先构建再交付 —— 因为 `dist/` 不入库**（`.gitignore` 里有 `dist/`，仓库树里没有一行 JS/CSS）：
+
+| 路 | 谁负责构建 |
+|---|---|
+| ① git 依赖 | npm 克隆后先装**这个 git 包自己的 devDependencies**、再跑 `prepare`（= `npm run build`），**然后**才把它装进 `node_modules/deer-ui`。`package.json` 里的 `"prepare": "npm run build"` 就是为这条存在的 |
+| ② tarball | `npm pack` / `npm publish` 前的 `prepack`（= `build` + `check:dist`） |
+| ③ 本仓库内开发 | `npm ci` / `npm install` 也会跑一次 `prepare`，所以装完 `dist/` 就已经有了 |
+
+> **`prepare` 会在本地 `npm install` / `npm ci` 时也跑一遍 build** —— 这是「产物不入库」的库仓库的正常形态，
+> 不是缺陷；重复跑是幂等的（`tsc` 与 `build-styles.mjs` 只覆盖 `dist/`）。
+
+> ⚠️ **别在库仓库自己的树上跑 `npm ci --omit=dev` / `npm install --omit=dev`**：`prepare` 要 `typescript`
+> （devDependency），省掉 dev 依赖它就直接红（实测：退出码 2，`[deer-ui] 找不到可用的 tsc…`）。
+> **消费者项目里 `--omit=dev` 没问题** —— 为 git 依赖装 devDependencies 是 npm 自己的行为，不受消费者 omit 影响
+> （两条都实测过，见「独立安装验证」的「从 git 装」一栏）。
+
 > **文件名差一个连字符，别记错**：npm 的 tarball 名由**包名**决定（`deer-ui-0.1.0.tgz`）；
 > 面向宿主仓库时本仓库另有 `npm run pack:vendor`，产出的名字是 `deerui-0.1.0.tgz`（宿主的历史约定，
 > 例如 PixelCraft 的 `file:vendor/deerui-0.1.0.tgz`）。**两者是同一份包**（装完都是 `deer-ui/`，
@@ -210,7 +226,8 @@ import { TabBar, DropMenu } from "deer-ui/tabs";
 ## 开发与调试
 
 ```sh
-npm ci                 # 按 package-lock.json 装依赖（CI 与本地首选；装完即可跑下面全部命令）
+npm ci                 # 按 package-lock.json 装依赖（CI 与本地首选）；装完会**顺带跑一次 prepare**（= build）
+                       #   → dist/ 直接就有了；下面的 build 要在源码改过之后重跑
 npm run typecheck      # tsc -p tsconfig.json --noEmit（src，strict: true）
                        #   && tsc -p tsconfig.examples.json（示范页，它不在 src 里）
 npm run build          # tsc -p tsconfig.build.json → dist/（ESM + .d.ts，逐文件，无 bundler）
@@ -256,7 +273,7 @@ tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显
 | `kit.*` + `lib.*`（A0-1/2/3 + 测试基建 + 样式归属 + 预算闸门） | **72** | 库自己的判据与基建 |
 | **运行期断言合计**（= 预算闸门下限） | **134** | 62 + 72，只许涨 |
 
-`tests/budget.test.ts` 钉的是**库自己的两个下限**（`ui.*` ≥ 62 与 `kit.*`+`lib.*` ≥ 61，**分开判** ——
+`tests/budget.test.ts` 钉的是**库自己的两个下限**（`ui.*` ≥ 62 与 `kit.*`+`lib.*` ≥ 72，**分开判** ——
 总数会掩盖「基建长胖、控件契约变少」）；**宿主侧的账不在这个仓库**（宿主自己收，库不得反向依赖宿主仓库）。
 
 ## 依赖与工具链
@@ -282,6 +299,7 @@ tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显
 
 有 `package-lock.json`，所以走 `npm ci`：装上的是锁里那一份（版本 + integrity 都核），不受「今天 registry 上是哪个版本」
 影响。CI 里**没有、也不需要**任何宿主仓库在场 —— 这正是「库能独立安装与运行」这条地基的机器判据。
+（`npm ci` 自己会跑一次 `prepare`（= build），所以这条流水线里 build 实际跑了两遍；幂等，不影响判据。）
 
 > 若推送改动时 GitHub 报 token 缺 `workflow` scope（`.github/workflows/` 下的文件需要它），
 > 临时把本文件改名为 `.github/ci.yml.example` 再推即可 —— 内容一个字不用改，等换一把有该 scope 的
@@ -301,6 +319,21 @@ npm run check:dist # 产物自检：OK（含 styles.css 的字节数与规则数
 四条全绿才算过；任何残留的 `../<某个宿主>/...` 回退（`scripts/tsc-path.mjs` 与 `scripts/link-dev-deps.mjs`
 里曾各有一条）都会在这种目录里当场暴露。库侧 `node_modules/` **必须**是真目录 —— 用 junction 链别处的安装树
 会让「React 单实例」看起来满足，实际是两个仓库被悄悄绑在一起。
+
+### 「从 git 装」这条路（实测）
+
+`dist/` 不入库，所以「`npm i <git-url>` 能不能拿到 JS/CSS」完全取决于 `prepare`。两条都真跑过
+（**本地克隆模拟**：`git clone Z:\deer-ui <tmp>` 后照 npm 的 git 安装流程走 —— 本文写作时本仓库**尚未 push**，
+远端 HEAD 还是旧提交，所以这一栏**不是**对真 GitHub 远端的验证；换成真远端时 npm 走的是同一段代码，
+但**没验过就是没验过**）：
+
+| 情形 | 命令 | 结果 |
+|---|---|---|
+| 库仓库自己的树 | `git clone Z:\deer-ui <tmp>` → `npm install` | `prepare` 自动跑 `build` → `dist/` 出现（25 个文件），`dist/index.js`、`dist/styles.css` 都在 |
+| 仓库内 `npm pack` | 接上一步 `npm pack` | tgz 28 个条目，含 `package/dist/index.js`、`package/dist/styles.css`、`package/README.md`、`package/LICENSE`；tgz 里 `styles.css` 的 sha256 与库仓库一致 |
+| 消费者（默认） | 消费者项目里 `npm i git+file:///<本仓库>` | `node_modules/deer-ui/dist/index.js` + `dist/styles.css` 都在，`styles.css` 的 sha256 与库仓库一致，`exports["./styles.css"]` = `./dist/styles.css` |
+| 消费者（`--omit=dev`） | 同上 + `--omit=dev` | **一样成功**：npm 为 git 依赖装它自己的 devDependencies 并跑 `prepare`，不受消费者的 omit 影响 |
+| 库仓库自己的树 + `--omit=dev` | `npm ci --omit=dev` | **红**（退出码 2，`[deer-ui] 找不到可用的 tsc…`）：`prepare` 要 devDependencies 里的 `typescript`。库仓库**不要**这么装 |
 
 ## 有意偏离与已知缺口
 
@@ -360,9 +393,11 @@ npm run pack:vendor                  # → deerui-0.1.0.tgz（同时产出 npm �
 与宿主 blob 一致），但**别拿两个工作区的字节直接比**（CRLF vs LF 会假红）。本仓库**生成的样式产物统一 LF**
 （见「库自带样式」）。
 
-**还没收掉的一处注释级残留**：`src/kit/primitives.tsx` 与 `dist/kit/primitives.js` 里各留着一句
-「实现住在宿主的 `src/ui/kit`」的过时注释（搬运时就带着）。属注释级、不影响行为，改它要重出一次 tarball，
-登记待收（连同宿主侧 `src/ui/base.tsx:3` 的同一句）。
+**那处注释级残留已收掉（2026-09-20）**：`src/kit/primitives.tsx` 开头原来写着「实现住在宿主的 `src/ui/kit`，
+将来再搬出去」—— 那是搬运时的口径，现在已经反过来（**库是实现的唯一真相**，宿主只是消费者），
+所以改成了库视角的事实说明，并重跑 `npm run build` 让 `dist/kit/primitives.js` 跟上（`dist` 不入库，
+同步它只是为了让 `check:dist` 与随后 `npm pack` 出来的 tarball 一致）。宿主侧 `src/ui/base.tsx:3`
+还有同一句，属宿主仓库的收尾（库这边不再登记为「未收」）。
 
 ## 许可
 

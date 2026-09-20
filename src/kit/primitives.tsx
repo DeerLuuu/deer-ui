@@ -1,7 +1,9 @@
 // kit primitives — the SESSION-free base controls.
 //
-// Lives in src/ui/kit so the whole library can be moved out later; src/ui/base.tsx
-// re-exports everything for the existing call sites (see docs/UI.md §1.2).
+// The implementation lives **here**, in this repository's `src/kit/` — this package is
+// the source of truth for it (it was cut out of PixelCraft's `src/ui/`, which is now
+// just one consumer). Consumers import it as `deer-ui/kit`; a second copy of the
+// implementation anywhere else is a fork, not a re-export.
 import React, { useEffect, useRef, useState } from "react";
 import { showTip, hideTip, subscribeTip } from "../tooltip";
 import { useHoverTip } from "./HoverTip";
