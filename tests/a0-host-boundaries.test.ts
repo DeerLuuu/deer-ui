@@ -9,34 +9,28 @@
  *         `(orientation: landscape)` 这类**布局**查询（`primitives.tsx` 在用）。
  *
  * 断言名沿用方案里那一条：`kit.pcmode.pushed-not-detected`。
+ *
+ * **示范页为什么不在射程里**：`examples/demo.tsx` 是 dev-only 示范页（方案 §2.5 / Q8），它自己
+ * `createRoot` 挂到页面上、自己切 `data-theme` —— 那是**宿主**的活。P0b 把它放在 `src/` **之外**的
+ * `examples/`（本判据只扫 `src/**`），所以**不需要豁免名单**；`kit.examples.*` 把这件事钉住：
+ * ① 它在 `src/` 之外（`src/demo.tsx` 不得存在）；② **它的正文照样会被判据抓住**
+ * （证明「放过」靠的是位置，不是把规则放宽）；③ 它不进 `files`（进不了 tarball）；
+ * ④ 它不进构建（`npm run check:dist` 另有一条「dist 里不得有 demo」）。
  */
 
 import { eq, ok } from "./common";
 import { fs, libRoot, path, readText, relPosix, srcDir, walkSources } from "./env";
 import { boundaryFindings, type BoundaryFinding, type BoundaryKind } from "./scan";
 
-/**
- * **豁免名单：只放「扮演宿主」的示范页。**
- *
- * `src/demo.tsx` 是 dev-only 示范页（方案 §2.5 / Q8：不进 barrel、不进 `files`），它自己 `createRoot`
- * 挂到页面上、自己切 `data-theme` —— 那正是宿主的活儿；而 P0b 是**逐字节复制**，一个字都不许改。
- * 所以豁免它是必须的，但豁免**要付代价**，下面四条断言把代价写死：
- *   ① 文件真实存在；② 它自己的代码**确实会被判据抓住**（说明豁免在「过滤阶段」而不是「把规则放宽」）；
- *   ③ 构建把它排除（不进 `dist`）；④ `files` 不收 `src/`（所以它也进不了 tarball）。
- * 也就是说：只有「不发布、不被导出」的宿主角色文件才配豁免；将来想再塞一个进这个名单，四条断言会逼你说清楚。
- */
-const HOST_ROLE_FIXTURES = ["src/demo.tsx"];
+const DEMO_REL = "examples/demo.tsx";
 
 export function testA0HostBoundaries(): void {
   const root = libRoot();
   const src = srcDir();
   ok("kit.pcmode.root-exists", fs.existsSync(src), "src=" + src);
 
-  const allFiles = walkSources(src);
-  ok("kit.pcmode.sources-scanned", allFiles.length >= 1, "files=" + allFiles.length);
-
-  const exempt = new Set(HOST_ROLE_FIXTURES.map((r) => r.replace(/\//g, path.sep)));
-  const files = allFiles.filter((f) => !exempt.has(path.relative(root, f)));
+  const files = walkSources(src);
+  ok("kit.pcmode.sources-scanned", files.length >= 1, "files=" + files.length);
 
   const all: BoundaryFinding[] = [];
   for (const f of files) all.push(...boundaryFindings(relPosix(root, f), readText(f)));
@@ -47,24 +41,21 @@ export function testA0HostBoundaries(): void {
   eq("kit.safearea.host-owned", pick("safearea"), []);
   eq("kit.host.no-storage", pick("storage"), []);
 
-  // 豁免资格（四条代价）
-  // 「文件存在」这条只在 P0b 的源文件已经复制进来后才判 —— 空库上豁免名单里还没有文件，属于**待机**而不是失败。
+  // 示范页的位置契约（P0b 之前待机，不让空仓库变红）
   const p0Ready = fs.existsSync(path.join(src, "kit", "primitives.tsx"));
-  for (const rel of HOST_ROLE_FIXTURES) {
-    const abs = path.join(root, rel);
-    const tag = rel.replace(/[^A-Za-z0-9]/g, "_");
-    if (p0Ready) ok("kit.host-fixture." + tag + ".exists", fs.existsSync(abs), abs);
-    else ok("kit.host-fixture." + tag + ".pending", true, "P0b 尚未复制 " + rel + "（复制后 .exists 自动生效）");
-    const sample = 'document.documentElement.setAttribute("data-theme", "light");';
-    eq("kit.host-fixture." + tag + ".still-scanned", boundaryFindings(rel, sample).map((f) => f.kind), ["theme"]);
+  const demoPath = path.join(root, DEMO_REL);
+  if (p0Ready) ok("kit.examples.exists", fs.existsSync(demoPath), demoPath);
+  else ok("kit.examples.pending", true, "P0b 尚未复制 " + DEMO_REL + "（复制后 .exists 自动生效）");
+  if (fs.existsSync(demoPath)) {
+    ok("kit.examples.outside-src", !fs.existsSync(path.join(src, "demo.tsx")),
+      "示范页必须在 src/ 之外（现在在 " + DEMO_REL + "）：src/demo.tsx 不得存在");
+    eq("kit.examples.would-be-caught",
+      boundaryFindings(DEMO_REL, readText(demoPath)).map((f) => f.kind).indexOf("theme") >= 0, true);
   }
-  const buildCfgPath = path.join(root, "tsconfig.build.json");
-  const buildCfg = fs.existsSync(buildCfgPath) ? readText(buildCfgPath) : "";
-  ok("kit.host-fixture.not-built", buildCfg !== "" && HOST_ROLE_FIXTURES.every((r) => buildCfg.indexOf(r) >= 0),
-    "tsconfig.build.json 的 exclude 必须含：" + HOST_ROLE_FIXTURES.join(", "));
   const pkgPath = path.join(root, "package.json");
   const pkg = fs.existsSync(pkgPath) ? JSON.parse(readText(pkgPath)) : {};
-  ok("kit.host-fixture.not-packed", (pkg.files || []).indexOf("src") < 0, "files=" + JSON.stringify(pkg.files));
+  const packed: string[] = pkg.files || [];
+  ok("kit.examples.not-packed", packed.indexOf("examples") < 0 && packed.indexOf("src") < 0, "files=" + JSON.stringify(packed));
 
   // 自检：判据的语义边界（「该抓的抓住、该放过的放过」）
   const samples: [string, BoundaryKind[]][] = [

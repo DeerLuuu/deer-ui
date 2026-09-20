@@ -12,6 +12,7 @@ import { testInfra } from "./infra.test";
 import { testA0Purity } from "./a0-purity.test";
 import { testA0Barrel } from "./a0-barrel.test";
 import { testA0HostBoundaries } from "./a0-host-boundaries.test";
+import { testUiKit } from "./ui-kit.test";
 import { testAssertionBudget } from "./budget.test";
 
 function main(): void {
@@ -23,6 +24,8 @@ function main(): void {
   testA0Barrel();
   console.log("--- A0-3 库内不得自判 PC / 主题 / 安全区 ---");
   testA0HostBoundaries();
+  console.log("--- 控件 DOM 契约（P0b 从 PixelCraft tests/ui-kit.test.tsx 搬来） ---");
+  testUiKit();
   console.log("--- 断言预算闸门（P0b 起 ≥ 112） ---");
   testAssertionBudget();
   finish();

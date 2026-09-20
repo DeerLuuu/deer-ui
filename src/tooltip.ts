@@ -1,10 +1,33 @@
-/**
- * ★ 占位文件（A0 骨架）★ —— P0b 会用应用中 `src/ui/tooltip.ts` 的**逐字节副本整体覆盖本文件**。
- *
- * `tooltip` 是**库独占**模块（模块级订阅表单例，方案 R10）：应用侧 `src/ui/tooltip.ts`
- * 在 P6/P0b 之后必须改成「再导出库里的入口」或直接删掉，否则同一个提示会出现两张订阅表。
- *
- * 现在导出 0 个符号：`exports["./tooltip"]` 因此指向一个真实存在的空产物，
- * 骨架阶段的「能编译 / 能打包」不依赖任何假实现 —— 谁 import 了不存在的符号，编译期就会红。
- */
-export {};
+// Global long-press tooltip: one host renders at the bottom-centre of the
+// screen; any control (buttons, floating orbs, radial items, draggables) can
+// show a {title, desc} bubble by holding still ~450ms.
+export interface Tip {
+  title: string;
+  desc?: string;
+}
+
+let current: Tip | null = null;
+let hideTimer: number | null = null;
+const subs = new Set<(t: Tip | null) => void>();
+
+export function showTip(tip: Tip, autoHideMs = 0): void {
+  current = tip;
+  if (hideTimer !== null) { window.clearTimeout(hideTimer); hideTimer = null; }
+  if (autoHideMs > 0) hideTimer = window.setTimeout(() => { current = null; emit(); }, autoHideMs);
+  emit();
+}
+
+export function hideTip(): void {
+  if (hideTimer !== null) { window.clearTimeout(hideTimer); hideTimer = null; }
+  if (current) { current = null; emit(); }
+}
+
+function emit(): void {
+  for (const f of subs) { try { f(current); } catch { /* ignore */ } }
+}
+
+export function subscribeTip(fn: (t: Tip | null) => void): () => void {
+  subs.add(fn);
+  fn(current);
+  return () => { subs.delete(fn); };
+}

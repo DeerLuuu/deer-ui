@@ -22,17 +22,22 @@ PixelCraft（像素工坊）把 **UI 表现层**独立出来的控件库：React
 | 谁提供 i18n 文案 | **宿主**。库只收「键名 + 英文默认值」（P3 才接） |
 | 改库的顺序 | 先在本仓库改 → 打 tarball → 应用侧一个独立提交（提交信息带**库的 sha**，不带库版本号） |
 
-**迁移期现状（A0 骨架）**：`src/` 下只有三个**占位**文件（`kit/index.ts` / `tabs.tsx` / `tooltip.ts`）
-和一个根 barrel `index.ts`。P0b 会用应用侧 9 个文件的逐字节副本覆盖这三个占位文件 ——
-占位文件头部都写了「★ 占位文件 ★ P0b 会整体覆盖」，不要手改。
+**现状（P0b 已落地）**：应用侧 P0 切片的 **9 个文件**已复制进来（`src/kit/*` 7 个 + `src/tabs.tsx` + `src/tooltip.ts`，
+逐字节等价、只改了 `src/kit/scrub.tsx` 的 2 行 import 指向库内 `src/internal/*`）；`src/engine/{expr,scrub}` 作为
+**内联副本**进了 `src/internal/`（库不得反向 import 宿主，方案 R11 接受这份重复）；示范页在 `examples/demo.tsx`
+（不进 barrel / 不进 `files` / 库测试不依赖）。断言台账见下面「P0b 落地记录」。
 
 ## 目录结构
 
 ```
 src/index.ts            公开 barrel（只 re-export；A0-2 盯着它）
-src/kit/index.ts        ★ 占位：P0b 覆盖为 kit barrel（25 值 + 6 类型）
-src/tabs.tsx            ★ 占位：P0b 覆盖为 TabBar / DropMenu
-src/tooltip.ts          ★ 占位：P0b 覆盖为 showTip / hideTip / subscribeTip（库独占）
+src/kit/                P0b 从 PixelCraft `src/ui/kit` 复制的 7 个文件（index.ts 是 barrel）
+src/tabs.tsx            TabBar / DropMenu
+src/tooltip.ts          showTip / hideTip / subscribeTip（**库独占**，见方案 R10）
+src/internal/expr.ts    内联自 PixelCraft `src/engine/expr.ts`（算式求值；文件头有出处与防分叉说明）
+src/internal/scrub.ts   内联自 PixelCraft `src/engine/scrub.ts`（拖动/滚轮数值数学）
+examples/demo.tsx       dev-only 示范页（逐字节复制自应用 `kit/demo.tsx`，只有 1 行 import 改动）
+                        —— **不进 barrel / 不进 files / 不进 dist**；库测试不依赖它（那 6 条 ui.demo.* 留在宿主侧）
 tests/tsconfig.json     库测试的编译编排（rootDir=库根、outDir=tests/.ts-out、include 用 glob）
 tests/common.ts         ok / eq / finish（打印 `assertions: N` 与 `ALL PASS`）
 tests/env.ts            Node 标准库薄封装 + 库根解析（DEERUI_LIB_ROOT 可覆盖）
@@ -40,17 +45,21 @@ tests/scan.ts           三条判据用到的纯扫描函数（可单测，见�
 tests/a0-purity.test.ts         A0-1 纯度白名单
 tests/a0-barrel.test.ts         A0-2 barrel 导出面快照
 tests/a0-host-boundaries.test.ts A0-3 不得自判 PC / 主题 / 安全区
+tests/ui-kit.test.tsx   P0b 从应用 `tests/ui-kit.test.tsx` 搬来的 62 条控件 DOM 契约断言
 tests/dom-stub.ts       自带 DOM 桩（R9：库测试不许依赖应用侧 stubEnv()）
 tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显式更新）
 scripts/tsc.mjs         解析一个可用的 tsc（本地 → $DEERUI_TSC → 平级 PixelCraft）
-scripts/check-dist.mjs  dist 产物自检（exports 目标存在 / 没打进 React / 无外链）
+scripts/check-dist.mjs  dist 产物自检（exports 目标存在 / 没打进 React / 无外链 / 没有 demo）
 scripts/link-dev-deps.mjs 无网络环境下的 devDependency 权宜链接（见下）
+scripts/pack-vendor.mjs  产出应用侧约定的 deerui-<version>.tgz 并打印 sha256
+tsconfig.examples.json  示范页的类型检查（它不在 src 里，但 import 路径漂了要能红）
 ```
 
 ## 命令
 
 ```sh
 npm run typecheck      # tsc -p tsconfig.json --noEmit（src，strict: true）
+                       #   && tsc -p tsconfig.examples.json（示范页，它不在 src 里）
 npm run build          # tsc -p tsconfig.build.json → dist/（ESM + .d.ts，逐文件，无 bundler）
 npm test               # 编译 tests/ 到 tests/.ts-out 后运行；末两行是 assertions: N / ALL PASS
 npm run snapshot:barrel  # 导出面**有意**变化时更新快照（必须连同提交信息一起说明）
@@ -92,37 +101,52 @@ npm run pack:vendor    # 再落一份应用侧约定的 deerui-0.1.0.tgz（见�
 
 扫描前会**去掉注释**（保留行号），所以「注释里提了一句 `localStorage`」不会误报。
 
-**A0-3 的唯一豁免：`src/demo.tsx`**（方案 §2.5 / Q8 的 dev-only 示范页）。它自己 `createRoot` 挂到页面上、
-自己切 `data-theme` —— 那是**宿主**的活，而 P0b 要逐字节复制它，一个字都不许改。豁免要付四条机器代价
-（`kit.host-fixture.*`）：① 文件真实存在（P0b 前为 `pending`）；② 它的代码**照样会被判据抓住**
-（证明豁免发生在过滤阶段，而不是把规则放宽）；③ `tsconfig.build.json` 把它排除（不进 `dist`）；
-④ `files` 不收 `src/`（进不了 tarball）。**示范页必须落在 `src/demo.tsx`**（它 `import "./index"` 拿的是根 barrel）；
-放进 `src/kit/` 会被 A0-3 判红。
+**示范页为什么不需要豁免**：`examples/demo.tsx` 是 dev-only 示范页（方案 §2.5 / Q8），它自己
+`createRoot` 挂到页面上、自己切 `data-theme` —— 那是**宿主**的活。P0b 把它放在 `src/` **之外**，而 A0-3 只扫
+`src/**`，所以它在射程之外；`kit.examples.*` 四条把这件事钉住：① 它在 `src/` 之外（`src/demo.tsx` 不得存在）；
+② **它的正文照样会被判据抓住**（`kit.examples.would-be-caught` —— 证明「放过」靠的是位置，不是把规则放宽）；
+③ 它不进 `files`（进不了 tarball）；④ `check:dist` 另有一条「dist 里不得出现 demo」。
 
-### P0b 复制进来时，判据会红成什么样（已用真实文件校准）
+### P0b 落地记录（2026-09-20）
 
-把应用侧 `src/ui/kit` 的 7 个文件 + `tabs.tsx` + `tooltip.ts` 按库布局摆好跑一遍本仓库的判据（夹具在 `%TEMP%`，未入库）：
+**复制口径**：应用侧 12 个文件按字节复制进来，然后只做「import 路径 + 必要的类型引用」改动。逐行核对（行尾归一后）：
 
-- **A0-1 会红 2 条**，且正是方案 §2.6 说的那类越界：`src/kit/scrub.tsx:7 -> ../../engine/expr`、
-  `src/kit/scrub.tsx:8 -> ../../engine/scrub`（解析得到、但落在 `src/` 之外）。按方案把它们内联进
-  `src/internal/{expr,scrub}.ts` 后转绿；`primitives.tsx` 的 `../tooltip` 因为 `tooltip.ts` 就在库根，**不再算越界**。
-- **A0-2 会红**（快照还是空库那一份）—— 那时导出面从 0 变成
-  `./kit` = **25 个值 + 6 个类型**（与方案 §3.2 的数字一致），根入口 `.` 再补上 `TabBar` / `DropMenu` 与
-  `tooltip` 的 3 个值 + `Tip` 类型。跑一次 `npm run snapshot:barrel` 即可。
-- **A0-3 全绿**（真实文件里没有 PC / 主题 / 安全区自判；`window.innerWidth` 与 `(orientation: landscape)` 都被正确放过）。
-- `lib.budget.assertions>=112` 在复制完成后**自动生效**（P0b 前是 `p0-pending` 待机）。
+| 库内文件 | 相对应用侧 | 改了什么 |
+|---|---|---|
+| `src/kit/{primitives,Dialog,Form,HoverTip,pcmode,index}.tsx/ts`、`src/tabs.tsx`、`src/tooltip.ts` | **逐行相同** | 无 |
+| `src/kit/scrub.tsx` | 差 **2 行** | 第 7 行 `../../engine/expr` → `../internal/expr`；第 8 行 `../../engine/scrub` → `../internal/scrub` |
+| `examples/demo.tsx` | 差 **1 行** | 第 14 行 `./index` → `../src/index`（它从 `src/ui/kit/` 挪到了 `examples/`） |
+| `src/internal/{expr,scrub}.ts` | 多 **5 行**头部 | 出处注释 + 「库不得反向 import 宿主 / 防分叉」说明；其余 87 / 60 行逐行相同 |
+
+**断言台账**（机器口径：用 `%TEMP%` 的计数夹具把应用那份 `ui-kit.test.tsx` 单独编译运行一次，记录运行期断言名）：
+
+| 项 | 条数 | 说明 |
+|---|---|---|
+| 应用侧 `tests/ui-kit.test.tsx` 运行期断言 | **70** | 不是方案里写的 112（见下「112 的差异」） |
+| └ 搬进库（`tests/ui-kit.test.tsx`） | **62** | 名字逐字保留（仍是 `ui.*`），比对结果「库侧有、应用侧没有」= **0 条**，即零改名、零削弱 |
+| └ 留在宿主侧 | **8** | `ui.demo.*` 6 条（示范页在 `examples/`，库测试不依赖它）+ `ui.overlay-full-wiring`（断言宿主 `src/ui/App.tsx` 接线）+ `ui.dropmenu.pop-css`（断言宿主 `src/ui/style.css`） |
+| 库侧运行期断言合计 | **123** | 62（搬来的）+ 61（A0-1/A0-2/A0-3/infra/预算闸门）—— 预算闸门 `≥ 112` 因此成立 |
+
+**112 的差异**（必须写清楚，免得下一轮以为丢了 42 条）：`docs/PLAN-deer-ui.md` 里「112 条 DOM 契约断言」这个数字
+与 `tests/ui-kit.test.tsx` 的实际运行条数（70）对不上；本仓库按**实测**记账（夹具与结果都在 `%TEMP%`，
+可复现：`node deerui-hostcount-setup.mjs` → 编译 → `node deerui-names.cjs …`）。要核 112 的来源，得回应用仓库重新数一遍。
+
+**给宿主侧（t3）的两条硬约束**：
+1. 应用侧 `src/ui/kit/demo.tsx` **P0b 不能删** —— 那 6 条 `ui.demo.*` 还要渲染它；按 Q8，应用侧副本到 P7 才删。
+2. 应用侧现在有 62 条断言与库侧**同名同义**（双跑窗口）。t3 把它们从应用侧删掉时，建议按名字对账：
+   `库侧 ui.* 集合 == 应用侧 ui.* 集合 − 8（上面那三条来源）`。
 
 **复制时的行尾陷阱（实测）**：两个仓库都是 `core.autocrlf=true` 且都**没有** `.gitattributes`，
-所以 PixelCraft 的**工作区**文件是 **CRLF**、而本仓库新建的文件是 LF。从应用侧拷文件进来**不必手工转 LF**
-（`git add` 会按 `text=auto` 把 CRLF 归一成 LF 入库，与应用侧 blob 一致），
-但**别拿两个工作区的字节直接比**（CRLF vs LF 会假红）——要验「逐字节等于应用侧那份」就比
-`git hash-object <file>`（这条走同一套归一规则）。
+所以 PixelCraft 的**工作区**文件是 **CRLF**、而本仓库骨架阶段新建的文件是 LF。从应用侧拷文件进来**不必手工转 LF**
+（`git add` 会按 `text=auto` 把 CRLF 归一成 LF 入库，与应用侧 blob 一致；P0b 复制的 12 个文件
+`git hash-object` 与应用侧**逐个相同**），但**别拿两个工作区的字节直接比**（CRLF vs LF 会假红）。
 
 ### 导出面快照怎么用
 
 - 改动**导出面**必须显式更新：`npm run snapshot:barrel`，然后在提交信息里写清加了/删了/改了什么符号。
 - 快照文件 `tests/snapshots/barrel-exports.json` 的 diff 就是「这次公开面变了什么」的清单。
-- P0b 把 9 个文件复制进来后，这份快照会**立刻变红**（这是设计如此）；跑一次 `npm run snapshot:barrel` 即可。
+- P0b 落地时这份快照已按真实导出面更新：`./kit` = **25 个值 + 6 个类型**，`. ` 另含 `TabBar`/`DropMenu`
+  与 `tooltip` 的 3 个值 + `Tip`。
 
 ## 库测试基建的三处**有意偏离**（相对应用仓库）
 

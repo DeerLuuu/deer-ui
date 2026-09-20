@@ -1,0 +1,11 @@
+{
+  // 示范页（`examples/demo.tsx`）**不在发布面上**，但它是「库能不能被外部宿主装起来」的唯一现成样板，
+  // 所以要让 `npm run typecheck` 也检查它（否则 import 路径一漂就静默烂掉 —— R12 那类静默失效）。
+  // 与 tsconfig.json 的差别只有两处：include 换成 examples、rootDir 抬到仓库根（示例文件在 src/ 之外）。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["examples"]
+}

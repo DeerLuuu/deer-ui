@@ -1,10 +1,13 @@
-/**
- * ★ 占位文件（A0 骨架）★ —— P0b 会用应用中 `src/ui/kit/index.ts` 的**逐字节副本整体覆盖本文件**，
- * 不要手改本文件，也不要在它旁边另建一份 barrel。
- *
- * 为什么先放一个空 barrel：包入口 `exports["./kit"]` 指向 `dist/kit/index.js`，
- * 骨架阶段就得让「能编译 / 能打包 / 三条判据能跑」这三件事成立，而不是让 exports 指向不存在的文件。
- * 空 barrel（0 导出）在 A0-2 的快照里表现为 `{"values": [], "types": []}`，
- * P0b 复制进来后快照立刻变红 —— 那正是「导出面改动即红」这条判据的用法。
- */
-export {};
+// Public entry of the UI kit (docs/UI.md). Everything exported here is
+// SESSION-free, so the demo page and, later, a standalone package can import
+// it without booting the app.
+export { Icon, Btn, TipHost, Overlay, Keep, useBlankTap, useLandscape } from "./primitives";
+export { ScrubNum } from "./scrub";
+export type { ScrubNumProps } from "./scrub";
+export { Dialog } from "./Dialog";
+export { HoverTip, hoverTipPos, useHoverTip, setHoverTipsEnabled, useHoverTipsEnabled, hoverTipsEnabled } from "./HoverTip";
+export { setKitPcMode, kitPcOn, useKitPcMode } from "./pcmode";
+export type { HoverTipProps, HoverTipApi } from "./HoverTip";
+export type { DialogProps } from "./Dialog";
+export { Row, RowActions, ChipGroup, Segmented, Switch, NumberField, ColorField } from "./Form";
+export type { RowProps, ChipOption } from "./Form";

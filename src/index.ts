@@ -8,8 +8,10 @@
  * ③ 公开面 = 本文件解析出来的符号集合 = `tests/snapshots/barrel-exports.json` 的快照，
  *    改导出面必须显式跑 `npm run snapshot:barrel` 并说明改了什么。
  *
- * P0b 的变化：`src/kit/index.ts` / `src/tabs.tsx` / `src/tooltip.ts` 会被应用侧的逐字节副本覆盖，
- * 那时这三行 re-export 就把 25 个值 + 6 个类型 + TabBar/DropMenu 抬上公开面（本文件**不需要改**）。
+ * P0b 已落地：`src/kit/index.ts` / `src/tabs.tsx` / `src/tooltip.ts` 现在是应用侧的逐字节副本（只有
+ * `src/kit/scrub.tsx` 的 2 行 import 指向内联进来的 `src/internal/*`），这三行 re-export 把
+ * **25 个值 + 6 个类型**（kit）、`TabBar`/`DropMenu`（tabs）、`showTip`/`hideTip`/`subscribeTip`（tooltip）
+ * 全部抬上了公开面（数字见 `tests/snapshots/barrel-exports.json`）。
  */
 
 /** 控件族：Dialog / Form / primitives / scrub / HoverTip / pcmode 的 barrel。 */

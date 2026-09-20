@@ -56,6 +56,8 @@ for (const f of [...js, ...dts]) {
   const text = readFileSync(f, "utf8");
   const rel = path.relative(libRoot, f).split(path.sep).join("/");
   if (text.includes("react-dom.development")) failures.push(`${rel} 里出现 react-dom.development（React 被打进库了）`);
+  // 示范页（examples/demo.tsx）是 dev-only：它不进 files、也不该出现在 dist 里（方案 §2.5 / Q8）
+  if (/\/demo\.(js|d\.ts)$/.test(rel)) failures.push(`${rel} 出现在 dist 里（示范页不该进产物）`);
   for (const url of text.match(/https?:\/\/[^\s"')]+/g) || []) {
     if (url.startsWith("https://www.w3.org/2000/svg") || url.startsWith("http://www.w3.org/2000/svg")) continue;
     failures.push(`${rel} 里出现外链：${url}`);

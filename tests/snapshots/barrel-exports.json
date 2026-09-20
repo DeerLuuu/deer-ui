@@ -1,18 +1,104 @@
 {
   ".": {
-    "values": [],
-    "types": []
+    "values": [
+      "Btn",
+      "ChipGroup",
+      "ColorField",
+      "Dialog",
+      "DropMenu",
+      "HoverTip",
+      "Icon",
+      "Keep",
+      "NumberField",
+      "Overlay",
+      "Row",
+      "RowActions",
+      "ScrubNum",
+      "Segmented",
+      "Switch",
+      "TabBar",
+      "TipHost",
+      "hideTip",
+      "hoverTipPos",
+      "hoverTipsEnabled",
+      "kitPcOn",
+      "setHoverTipsEnabled",
+      "setKitPcMode",
+      "showTip",
+      "subscribeTip",
+      "useBlankTap",
+      "useHoverTip",
+      "useHoverTipsEnabled",
+      "useKitPcMode",
+      "useLandscape"
+    ],
+    "types": [
+      "ChipOption",
+      "DialogProps",
+      "DropOption",
+      "HoverTipApi",
+      "HoverTipProps",
+      "RowProps",
+      "ScrubNumProps",
+      "TabItem",
+      "Tip"
+    ]
   },
   "./kit": {
-    "values": [],
-    "types": []
+    "values": [
+      "Btn",
+      "ChipGroup",
+      "ColorField",
+      "Dialog",
+      "HoverTip",
+      "Icon",
+      "Keep",
+      "NumberField",
+      "Overlay",
+      "Row",
+      "RowActions",
+      "ScrubNum",
+      "Segmented",
+      "Switch",
+      "TipHost",
+      "hoverTipPos",
+      "hoverTipsEnabled",
+      "kitPcOn",
+      "setHoverTipsEnabled",
+      "setKitPcMode",
+      "useBlankTap",
+      "useHoverTip",
+      "useHoverTipsEnabled",
+      "useKitPcMode",
+      "useLandscape"
+    ],
+    "types": [
+      "ChipOption",
+      "DialogProps",
+      "HoverTipApi",
+      "HoverTipProps",
+      "RowProps",
+      "ScrubNumProps"
+    ]
   },
   "./tabs": {
-    "values": [],
-    "types": []
+    "values": [
+      "DropMenu",
+      "TabBar"
+    ],
+    "types": [
+      "DropOption",
+      "TabItem"
+    ]
   },
   "./tooltip": {
-    "values": [],
-    "types": []
+    "values": [
+      "hideTip",
+      "showTip",
+      "subscribeTip"
+    ],
+    "types": [
+      "Tip"
+    ]
   }
 }
