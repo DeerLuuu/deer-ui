@@ -18,8 +18,8 @@
  * | 项 | 条数 | 来源 |
  * |---|---|---|
  * | `ui.*` 控件 DOM 契约 | **62** | 库自带（`tests/ui-kit.test.tsx`） |
- * | `kit.*` + `lib.*`（A0 三条判据 + 测试基建 + 本条闸门） | **61** | 库自带 |
- * | **库侧合计** | **123** | `npm test` 末行 `assertions:` 的实测值 |
+ * | `kit.*` + `lib.*`（A0 三条判据 + 测试基建 + 样式归属判据 + 本条闸门） | **72** | 库自带 |
+ * | **库侧合计** | **134** | `npm test` 末行 `assertions:` 的实测值 |
  *
  * 数法：`npm test` 末尾打印 `assertions: N`；`tests/common.ts` 的 `byPrefix` 另给按前缀的构成。
  * 断言条数**只许涨**：要降就得改这里的下限，并在提交信息里写清为什么（别悄悄把闸门调松）。
@@ -33,7 +33,7 @@ import { fs, path, srcDir } from "./env";
 /** 库自带控件契约断言（`ui.*`）的下限。 */
 export const MIN_CONTRACT = 62;
 /** 库自身判据 + 测试基建（`kit.*` + `lib.*`）的下限，含本条闸门自己。 */
-export const MIN_INFRA = 61;
+export const MIN_INFRA = 72;
 /** 库侧断言总数下限 = 控件契约 + 判据与基建。 */
 export const MIN_TOTAL = MIN_CONTRACT + MIN_INFRA;
 

@@ -22,9 +22,9 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: 类型检查（src strict + 示范页）
         run: npm run typecheck
-      - name: 构建 dist（ESM + .d.ts）
+      - name: 构建 dist（ESM + .d.ts + dist/styles.css）
         run: npm run build
-      - name: 库测试（预算闸门：库自带断言总数 ≥ 123，口径见 tests/budget.test.ts 顶部）
+      - name: 库测试（预算闸门：库自带断言总数 ≥ 134，口径见 tests/budget.test.ts 顶部）
         run: npm test
-      - name: dist 自检（exports 目标 / 没打进 React / 无外链 / 没有 demo）
+      - name: dist 自检（exports 目标 / 没打进 React / 无外链 / 没有 demo / styles.css 幂等）
         run: npm run check:dist

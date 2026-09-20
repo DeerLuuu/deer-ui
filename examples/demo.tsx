@@ -1,11 +1,17 @@
 // UI-kit demo page (dev only, not part of the app bundle).
 //
-//   sh scripts/build-ui-demo.sh && node toolchain/devserver.js
-//   → http://127.0.0.1:8090/ui-demo.html
+//   node toolchain/devserver.js → http://127.0.0.1:8090/ui-demo.html
 //
 // Every kit component in every variant on one screen, plus a token swatch and a
 // dark/light switch. It imports nothing but the kit barrel, which doubles as the
 // purity check from docs/UI.md §1.1 exercised at runtime.
+//
+// **它只吃库自己的样式**（`src/styles/*.css`）：这一页是「库能不能独立被消费」的样板，
+// 所以**不许**依赖任何宿主样式表（早先这页靠应用 `css/style.css` 提供 `.app-root/.topbar/.note`，
+// 那正是「库不自带样式」的症状）。页面自身的版式在 `examples/demo.css`（dev-only、不进 dist）。
+import "../src/styles/tokens.css";
+import "../src/styles/kit.css";
+import "./demo.css";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -67,9 +73,9 @@ export function Demo() {
     setLight(!light);
   };
   return (
-    <div className="app-root" style={{ height: "auto" }}>
-      <div className="topbar">
-        <span className="title">PixelCraft UI Kit</span>
+    <div className="demo-page">
+      <div className="demo-topbar">
+        <span className="demo-title">deer-ui kit</span>
         <div className="grow" />
         <Btn label={light ? "深色主题" : "浅色主题"} icon="i-eye" onClick={toggleTheme} />
         <Btn label="打开弹窗" icon="i-layers" className="primary" onClick={() => setDlg(true)} />
@@ -145,7 +151,7 @@ export function Demo() {
       <Sec title="Dialog">
         <div className="demo-row">
           <Btn label="打开示例弹窗" className="primary" onClick={() => setDlg(true)} />
-          <span className="note">遮罩点击 / × / Esc 均可关闭</span>
+          <span className="demo-note">遮罩点击 / × / Esc 均可关闭</span>
         </div>
         {dlg && (
           <Dialog

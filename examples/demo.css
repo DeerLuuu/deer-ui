@@ -1,0 +1,25 @@
+/* ============================================================
+   示范页自己的版式（**dev-only**：不进 `files`、不进 `dist`、库测试不依赖）
+   ------------------------------------------------------------
+   这一页是「库能不能被外部宿主装起来」的样板，所以它**只吃库自己的样式**：
+   `examples/demo.tsx` 里 import 了 `../src/styles/tokens.css` + `../src/styles/kit.css`
+   （= `dist/styles.css` 的两个源文件），再加这一份页面版式。
+
+   早先这页靠宿主（PixelCraft）的 `css/style.css` 提供 `.app-root/.topbar/.title/.note`，
+   那正是「库不自带样式、组件是裸 div」的症状 —— 本轮起不再假设宿主的样式表存在。
+   下面这些选择器**不属于库的公开样式**，所以只活在这里，别搬进 `src/styles/`。
+   ============================================================ */
+
+html,body{margin:0;padding:0;min-height:100%}
+body{background:var(--bg);color:var(--text);
+  font-family:Roboto,"Noto Sans CJK SC","Noto Sans SC",system-ui,sans-serif;font-size:14px;overflow:auto}
+#root{padding:16px}
+
+.demo-page{display:flex;flex-direction:column;gap:2px}
+.demo-topbar{display:flex;align-items:center;gap:8px;padding:6px 8px;
+  border:1px solid var(--line);border-radius:var(--r-2);background:var(--bg2)}
+.demo-title{font-weight:700;margin-left:6px}
+.demo-sec{margin:0 0 20px}
+.demo-h{font-weight:800;font-size:15px;margin:14px 0 8px;color:var(--text)}
+.demo-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.demo-note{font-size:12px;color:var(--dim)}

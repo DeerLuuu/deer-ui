@@ -1,0 +1,217 @@
+/* ============================================================
+   deer-ui 控件样式（kit）
+   ------------------------------------------------------------
+   归属：**库**。判定规则（可复核，见 README「样式归属」一节）——**按组件真的渲染出哪个 class**，
+   不按名字像不像：
+
+     R1 令牌块（`:root` / `[data-theme="light"]`）→ 库（在 tokens.css）
+     R2 普通规则（选择器列表 + 声明块**整条原子**）：选择器里的类名**全部**由库组件渲染
+        （`src/kit/**`、`src/tabs.tsx`、`src/tooltip.ts`、`examples/demo.tsx`）→ 进库；
+        只要有一个类名只有应用侧在渲染 → **连整条规则一起留应用**（不拆选择器列表，见下）
+     R3 纯元素选择器（没有类名/属性选择器）：命中 `html`/`body`/`#root` → 留应用（页面外壳）；
+        命中库组件渲染的元素（`*`、`svg`、`button`、文本类 `<input>`、`canvas,svg,img,button`）→ 进库
+     R4 `html[data-pc] …`（PC 密度覆写）→ 留应用：PC 模式由宿主判定并写 `data-pc`（方案 R3）
+     R5 `@keyframes`：被进库规则的声明引用 → 进库；只被应用规则引用 → 留应用
+     @media 块：本次**没有**一条 @media 里只含 kit 规则 → 整块留应用（不把规则挪出 @media）
+
+   **逐条原样**：下面每条规则都是从 PixelCraft `src/ui/style.css` 原样剪下来的（声明一个字符没改，
+   顺序也保持原文顺序；行尾归一成 LF）。应用侧那份对应规则会删掉、改从 `deer-ui/styles.css` 消费，
+   所以两边的并集必须**不重不漏**（对账脚本与结论见 2026-09-20 的执行记录）。
+   ============================================================ */
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+
+canvas,svg,img,button{-webkit-user-drag:none;-webkit-touch-callout:none}
+
+input,textarea{user-select:text;-webkit-user-select:text}
+
+svg{width:20px;height:20px;fill:currentColor;stroke:none;display:block;flex:0 0 auto}
+
+button{background:none;border:none;color:inherit;padding:0;font:inherit;cursor:pointer}
+
+input,select{font:inherit;color:var(--text)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:34px;
+  min-height:34px;padding:5px 8px;border-radius:9px;color:var(--dim);
+  background:transparent;flex:0 0 auto;white-space:nowrap;font-size:13px}
+
+.btn:active{background:var(--bg4)}
+
+.btn.active{background:var(--accent);color:var(--on-accent)}
+
+.btn.danger{color:var(--danger-1)}
+
+.btn.primary{background:var(--accent);color:var(--on-accent)}
+
+.btn.off{opacity:.35}
+
+.btn.rail{width:40px;height:40px;border-radius:11px;min-height:40px}
+
+.btn.small{min-width:28px;min-height:28px;width:28px;height:28px;border-radius:8px}
+
+.btn.mini{min-width:26px;min-height:26px;width:26px;height:26px;border-radius:7px}
+
+.btn.mini.danger{color:var(--danger-2)}
+
+.btn.off{color:var(--disabled)}
+
+.grow{flex:1 1 auto;min-width:8px}
+
+.panel-mask,.dlg-mask{position:fixed;inset:0;background:var(--mask);z-index:40}
+
+.panel-mask{z-index:60}
+
+.panel{position:fixed;top:0;right:0;bottom:0;width:min(88vw,360px);z-index:61;background:var(--bg2);
+  border-left:1px solid var(--line);display:flex;flex-direction:column;box-shadow:var(--sh-panel)}
+
+.panel.panel-full{left:0;width:auto;border-left:0;box-shadow:none;
+  padding:var(--sat) var(--sar) var(--sab) var(--sal)}
+
+.row-actions{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}
+
+.rowlabel{font-size:11px;color:var(--dim);margin:8px 0 2px;display:block}
+
+.calcpad{position:fixed;z-index:70;display:flex;gap:4px;padding:4px;background:var(--bg2);
+  border:1px solid var(--line);border-radius:10px;box-shadow:var(--sh-2)}
+
+.cp-key{width:30px;height:30px;border-radius:7px;background:var(--bg3);color:var(--text);
+  font-size:14px;font-weight:700;line-height:1}
+
+.cp-key:active{background:var(--accent);color:var(--on-accent)}
+
+.cp-eq{background:var(--accent);color:var(--on-accent);width:34px}
+
+.cp-back{color:var(--dim)}
+
+.dlg{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(92vw,400px);z-index:50;
+  background:var(--bg2);border:1px solid var(--line);border-radius:16px;display:flex;flex-direction:column;
+  max-height:min(86vh, calc(100vh - var(--sat) - var(--sab) - 16px));box-shadow:var(--sh-4)}
+
+.dlg-head{display:flex;align-items:center;gap:8px;padding:13px 16px;border-bottom:1px solid var(--line);font-weight:700}
+
+.dlg-body{padding:12px 16px;overflow-y:auto}
+
+.dlg-body.col{display:flex;flex-direction:column;gap:6px}
+
+.dlg-foot{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);justify-content:flex-end}
+
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+
+.tab{flex:1;padding:8px 0;border-radius:9px;background:var(--bg3);color:var(--dim);font-weight:600;font-size:13px;text-align:center}
+
+.tab.on{background:var(--accent);color:var(--on-accent)}
+
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px}
+
+.chip{padding:7px 12px;border-radius:9px;background:var(--bg3);color:var(--dim);font-weight:600}
+
+.chip.on{background:var(--accent);color:var(--on-accent)}
+
+.sw{position:relative;width:42px;height:24px;border-radius:12px;background:var(--bg4);
+  border:1px solid var(--line);flex:0 0 auto;padding:0;transition:background .15s ease,border-color .15s ease}
+
+.sw i{position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;
+  background:var(--dim);transition:left .15s ease,background .15s ease}
+
+.sw.on{background:var(--accent);border-color:var(--accent)}
+
+.sw.on i{left:20px;background:var(--on-accent)}
+
+.sw[disabled]{opacity:.5}
+
+.tip-host{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 24px);transform:translateX(-50%);
+  z-index:120;max-width:min(86vw,340px);text-align:center;pointer-events:none;
+  background:var(--hud-tip);border:1px solid var(--line-2);border-radius:12px;padding:9px 16px;
+  box-shadow:var(--sh-2);animation:tiph .18s ease-out}
+
+.tip-host .th-title{font-size:14px;font-weight:800;color:var(--text-4);margin-bottom:2px}
+
+.tip-host .th-desc{font-size:12px;line-height:1.45;color:var(--tip-fg)}
+
+.htip{position:fixed;z-index:var(--z-tip);max-width:min(280px,60vw);pointer-events:none;
+  background:var(--surface-pop);border:1px solid var(--line-2);border-radius:var(--r-4);
+  padding:7px 11px;box-shadow:var(--sh-2);animation:pcFadeIn .1s ease-out both}
+
+.htip-title{font-size:var(--fs-4);font-weight:800;color:var(--text-4);white-space:nowrap}
+
+.htip-desc{font-size:var(--fs-3);line-height:1.45;color:var(--tip-fg);margin-top:2px}
+
+.rowlabel{display:flex;align-items:center}
+
+.set-color{display:flex;align-items:center;gap:8px;margin-top:6px}
+
+.set-color input[type=color]{width:44px;height:30px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--bg3)}
+
+.set-hex{font-family:monospace;font-size:12px;color:var(--dim)}
+
+.tabbar{display:flex;align-items:center;gap:8px;margin:2px 0 8px}
+
+.tabbar-tabs{display:flex;gap:2px;flex:1;min-width:0;overflow-x:auto;background:var(--bg3);border:1px solid var(--line);
+  border-radius:10px;padding:2px}
+
+.tabbar-tab{flex:0 0 auto;padding:6px 12px;border:0;border-radius:8px;background:transparent;color:var(--dim);
+  font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+
+.tabbar-tab.on{background:var(--accent);color:var(--on-accent)}
+
+.tabbar-right{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+
+.dropmenu{position:relative}
+
+.dropmenu-btn{display:inline-flex;align-items:center;gap:4px;padding:6px 9px;border-radius:9px;border:1px solid var(--line);
+  background:var(--bg3);color:var(--fg);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+
+.dropmenu-btn.on{background:var(--accent);color:var(--on-accent);border-color:var(--on-accent)}
+
+.dropmenu-chev{font-style:normal;font-size:10px;opacity:.8}
+
+.dropmenu-back{position:fixed;inset:0;z-index:60}
+
+.dropmenu.up .dropmenu-list{top:auto;bottom:calc(100% + 4px)}
+
+.dropmenu-list.dropmenu-pop{position:fixed;z-index:61;max-height:min(60vh,240px);overflow-y:auto;overscroll-behavior:contain}
+
+.dropmenu-list{position:absolute;right:0;top:calc(100% + 4px);z-index:61;min-width:132px;padding:4px;
+  background:var(--bg2);border:1px solid var(--line);border-radius:10px;box-shadow:var(--sh-2b)}
+
+.dropmenu-item{display:block;width:100%;text-align:left;padding:7px 10px;border:0;border-radius:7px;background:transparent;
+  color:var(--fg);font-family:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+
+.dropmenu-item.on{background:var(--accent);color:var(--on-accent);font-weight:700}
+
+.keep.out{pointer-events:none}
+
+.panel-mask,.dlg-mask{animation:pcFadeIn .18s ease-out both}
+
+.panel{animation:pcPanelIn .26s cubic-bezier(.2,.85,.25,1) both}
+
+.dlg{animation:pcDlgIn .22s cubic-bezier(.2,.85,.25,1) both}
+
+.keep.out .panel-mask,.keep.out .dlg-mask{animation:pcFadeOut .16s ease-in both}
+
+.keep.out .panel{animation:pcPanelOut .18s ease-in both}
+
+.keep.out .dlg{animation:pcDlgOut .16s ease-in both}
+
+.tabbar-badge{font-style:normal;font-size:10px;font-weight:400;opacity:.6;margin-left:5px}
+
+input:not([type]),input[type="text"],input[type="number"],input[type="search"],input[type="email"],input[type="tel"],input[type="url"]{
+  background:var(--input-bg);border:1px solid var(--input-line);color:var(--input-text);border-radius:9px;padding:7px 9px;
+  outline:none;min-height:34px;box-sizing:border-box;caret-color:var(--accent);font-size:14px}
+
+input:not([type]):focus,input[type="text"]:focus,input[type="number"]:focus,input[type="search"]:focus{ border-color:var(--accent)}
+
+input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+input:not([type])::-webkit-input-placeholder,input[type="text"]::-webkit-input-placeholder{color:var(--dim-4)}
+
+input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px var(--input-bg) inset;-webkit-text-fill-color:var(--input-text)}
+
+/* ---------- 库规则用到的动画（应用侧同名 keyframes 的唯一副本） ---------- */
+@keyframes tiph{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes pcFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes pcFadeOut{from{opacity:1}to{opacity:0}}
+@keyframes pcPanelIn{from{opacity:.3;transform:translateX(72px)}to{opacity:1;transform:none}}
+@keyframes pcPanelOut{from{opacity:1;transform:none}to{opacity:0;transform:translateX(84px)}}
+@keyframes pcDlgIn{from{opacity:0;transform:translate(-50%,-50%) scale(.9)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@keyframes pcDlgOut{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-50%) scale(.94)}}
