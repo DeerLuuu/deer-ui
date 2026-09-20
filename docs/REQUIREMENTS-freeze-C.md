@@ -211,6 +211,25 @@
 | `docs/NEXT-round-B.md` | **无人**（归档件） | 只读 |
 | `dist/**`、`tests/.ts-out/**` | **无主人**（gitignore 的再生成产物） | 任何任务可重新生成；**不得入库**；结束前跑一次 `npm run build` 让 `dist/` 与 `src/` 一致 |
 
+> **t8 注记（2026-09-21）：实际落点以每条任务的 `inScope` 为准。** 上表是 t1 时刻的**计划归属**，
+> 与本轮实际执行有三处偏差，下一轮按本表找判据会找错地方，此处就地记下：
+>
+> 1. **A0-3 的 CSS 判据没有落在 `tests/styles.test.ts`**，而是落在 `tests/a0-host-boundaries.test.ts`
+>    （`kit.host.css-no-color-scheme` / `css-safearea-decls` / `css-media-allowlist` / `css-no-data-theme`
+>    四条 + `kit.host.css.selfcheck.*` 十条；扫描辅助纯函数写在该文件**本地**，`tests/scan.ts` 里没有加 CSS 逻辑）。
+>    原因：t3 的 `inScope` 不含 `tests/styles.test.ts`，也不含 `tests/run-tests.ts`（无法新建测试文件）。
+> 2. **`tests/budget.test.ts` 的过期注释**由 **t3** 写入、**t4** 收口、**t8** 按 `docs/WAVE-C-closeout.md` §5.3
+>    订正绝对值（上表写的是「符号工程师」）。
+> 3. **`README.md` 是两段编辑**：t3 改「三条 A0 判据」判据强度陈述、t4 改计数与「已知缺口」对账（上表只写了后者）。
+>
+> 另外，下面那张串行示意用的是**计划编号**，与运行时的 task id **不一致**（实际：t2 = 双格式补审、
+> t5 = 独立验证、t7 = 收尾记录、t8 = 收尾订正；集成提交由队长做）。
+>
+> - **判定方式**：`git show --stat ab051d0 c088878`（实际落地的文件清单）+ 本表逐行与 `git grep` 对照。
+> - **命令**：`git grep -n "kit.host.css" -- tests` → 只应命中 `tests/a0-host-boundaries.test.ts`。
+> - **理由**：本注记**只加不改表** —— 表里已被 `t5` 独立复核过的条目保持原样（改表本身须按本文件开头的
+>   规则另给新判据 + 命令 + 理由），同时让「下一轮按表找判据」不再踩空。
+
 **串行顺序（DAG 的硬要求）**：
 
 ```

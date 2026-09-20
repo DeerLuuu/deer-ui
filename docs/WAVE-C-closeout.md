@@ -27,6 +27,7 @@
 | C-9 | **双格式产物独立补审**（上一轮改造没走过质量门） | 无写入路径；结论见 t2 报告 | require/import × 4 入口 = 30/25/2/3，且与快照**逐元素相等**；React 单实例成立 | **t2 独立审计**（副本里做 3 个破坏性负例） |
 | C-10 | **计数与文档对账** | `README.md` / `CHANGELOG.md` / 本文件 | 现值 **222 = ui.\* 117 + kit.\*+lib.\* 105**；三道下限 62/72/134 **一处未动** | t7（本次）；t5 已独立确认 `REMOVED=∅`、`ADDED=79`（ui 46 + kit/lib 33） |
 | C-11 | **终局验证** | 本文件 §6.1 | 四条命令 + 原生加载两条，退出码全 0 | t7 本次；t5 独立跑过同一组命令 |
+| C-12 | **收尾订正（t8）**：V1 注释改成**按段计数**（62→65 / 50→53 + 现值 222）；冻结件 §5 加「实际落点以任务 `inScope` 为准」注记；本文件补 L-5 / L-6 登记 | `tests/budget.test.ts`、`docs/REQUIREMENTS-freeze-C.md`、本文件 | 注释 / 文档订正（**不改断言、不改三道下限、不动 `src/**`、不动快照**）；复算与红证见 §5.3 | t8 本次（独立复算，不引用 t5 的结论） |
 
 ### 1.1 12 个零断言符号 → 断言名（t4 交付，逐个差分过）
 
@@ -90,9 +91,9 @@
 | **F1**（CJS 的 TS 消费者拿不到类型：TS1479 / TS1471 / TS2307；ESM/bundler exit 0） | **两方独立**：t2 单变量实验 + **t7 本次独立复现**（同一组错误码，ESM/bundler 两次 exit 0） |
 | **F2**（README 的双包自检式恒为 false） | t2 实测（纯 CJS 与纯 ESM 宿主各自为 false）—— 与本轮 F1 复现同一批实验，**未再单独复核**，但结论方向不可能相反（两棵树必然是两个实例） |
 | **F3**（`check-dist` 的 `types` 首位判据 + 嵌套对象 `TypeError`） | t2 上报 + **t7 读代码确认**：`scripts/check-dist.mjs:83-85` 只判 `Object.keys(cond)[0] !== "types"`；`:87-88` 对每个条件值直接 `path.join(libRoot, target)`，**嵌套对象没有类型守卫** |
-| **V1**（`tests/budget.test.ts` 的历史分解绝对值偏 3） | t5 单方实测（`693ef56` vs 父 `dc337a3`）；t7 未重跑该 diff（`tests/**` 不在本轮写权范围） |
+| **V1**（`tests/budget.test.ts` 的历史分解绝对值偏 3） | t5 实测（`693ef56` vs 父 `dc337a3`）→ **t8 独立复算并订正注释**（同一结论：字面量 53/56/63 + `ui.kit.export.*` 展开 +9 ⇒ **62/65/72**，剔除 12 条 `ui.kit.*` = 50/53；见 §5.3）。t7 当时未重跑该 diff（`tests/**` 不在收尾任务的写权范围） |
 | `kit.barrel.root-union` 的判别力 | **t5 反例**（连快照一起改的作弊路径下仍红）。它的写法是：在内存里比较根面与「全部 JS 入口（含根自己）的并集」，守「根不许漏掉子入口符号」；`*.nonvacuous` 另外防「并集全空导致断言恒真」。**不是缺陷，没有待裁定口径。** |
-| t6（质量门）结论 | **本轮不存在**：t6 的 deps 含 t7，review 排在集成之后。所以「t6 的 findings」这一项**没有可登记的内容**；它的审查对象是 t3/t4 的产物，t5 已先行独立验证。 |
+| t6（质量门）结论 | **t6 实际运行过**（排在集成之后）：唯一 finding 是 **H1 —— 收尾记录先写了「工作区空 / 全绿」，而事实是零提交、`porcelain` 13 行**；处置与更正见 §6.2 的注记（提交 `ab051d0` + `c088878`，再由 `0ac0f65` 更正那两行）。t6 的审查对象是 t3/t4 的产物，t5 已先行独立验证。 |
 
 ---
 
@@ -125,7 +126,7 @@
   两者是一条链。改完必须补一条**负例**（构造一个 `types` 排在 `import` 之后的 `exports` → 必须红），否则
   就是「宽松化」而不是「修正」。
 
-### 5.3 V1 —— `tests/budget.test.ts` 的历史分解注释（low，只登记）
+### 5.3 V1 —— `tests/budget.test.ts` 的历史分解注释（low；**t8 已订正**）
 
 - **位置**：`tests/budget.test.ts:24-27`（t3 本轮写入）。写法「`ui-kit` 53 → 56 = +3」的**绝对值整体偏 3**。
 - **实测**（t5）：`693ef56` vs 父 `dc337a3` 的「控件 DOM 契约」段是 **62 → 65**；剔除其中 12 条 `ui.kit.*`
@@ -133,8 +134,15 @@
   `ui.scrubnum.bounds-ref`）都是对的。**
 - **出处**：`docs/NEXT-round-B.md:127` 与 `docs/REQUIREMENTS-freeze-C.md:110`（t3 逐字照抄；两处都是「待办/口径草稿」语境）。
 - **顺带**：该注释的现值停在 t3 落盘时的 `143 → 176`；范围 C 最终实测是 **222 = ui.\* 117 + kit.\*+lib.\* 105**。
-- **为什么没顺手改**：`tests/**` 不在收尾任务的写权范围（且闸门的三道下限本身**一处未动**，错的只是注释分解）。
-  下一轮：把该段改成「按段计数的正向说明 + 现值 222」，并在提交信息里写明这是**注释订正**。
+- **为什么当初没顺手改**：`tests/**` 不在收尾任务的写权范围（错的只是注释分解，闸门的三道下限本身一处未动）。
+- **t8 已订正**（`tests/budget.test.ts` 头部注释，2026-09-21）：改成**按段计数的正向说明** ——
+  「控件 DOM 契约」段 **62 → 65**、剔除 12 条 `ui.kit.*` 后 **50 → 53**；+3 的增量与三个断言名保留；
+  并写明范围 C 结束后的现值 **222 = ui.\* 117 + kit.\*+lib.\* 105** 与增量构成（kit/lib 33 + ui 46）。
+  三道下限数值**一处未动**（INV-C6）。
+  **t8 独立复算**（不引用 t5 的结论）：`git show dc337a3|693ef56|ab051d0:tests/ui-kit.test.tsx` 逐版数
+  `ui.` 断言名字面量 = **53 / 56 / 63**，加 `ui.kit.export.*` 循环展开的 **+9** ⇒ **62 / 65 / 72**；
+  `[budget]` 行的 117 = 72（ui-kit）+ 45（ui-hooks）与之吻合。
+  **提交信息须写明这是注释订正**（不改任何断言、不改三道下限）。
 
 ### 5.4 其余 low（登记即可，不必单开任务）
 
@@ -144,6 +152,8 @@
 | L-2 | `check-dist` 有一条判据只比**名字集合** | 值面的比较用的是 `valueNames()`（排序后的名字集合，`check-dist.mjs:193-194`），不比对值与导出身份。所以「同名但不同实现」它能过；真正的双包危险（单例分裂）它抓不到（t2 已实证） |
 | L-3 | node10 没有顶层 `types` 兜底 | 与 F1 同一批：要么补顶层 `types`（会与 `exports` 的 `types` 并存，需说明谁优先），要么在 README 明确「只支持 node16/bundler」 |
 | L-4 | `docs/NEXT-round-B.md:132`（F8）写「12 个被跟踪文件工作区是 CRLF」 | **实测口径**：`git ls-files --eol` 统计 **`w/crlf` = 3**（`examples/demo.tsx`、`src/internal/expr.ts`、`src/internal/scrub.ts`），`w/lf = 51`（本机、本次检出）。t2 另记为 6、旧文写 12 —— **这个数随检出/平台变**，下一轮请写**命令**而不是固定数字。这些文件不进 tarball（`files` 只含 `dist` / `LICENSE` / `README.md`），打包可复现性不受影响 |
+| L-5 | A0-3 的 `env()` 例外口径**可以收紧**（t8 登记；本轮**只登记不改**） | 现口径：`--sa*` 声明只要是 `env(…)` 值且在**任意** `:root{}` 块里就放过（不区分文件）。若要收紧：① 把例外限制在 `tokens.css`（或仅 `:root` 的**第一次**出现）；② **同步**加一条自检样本「**`kit.css` 里的 `:root{--sat:env(…)}` ⇒ `safearea-write`**」；③ 重跑 t5 那批注入负例 —— `tokens.css` 的 4 条合法 `env()` 兜底必须**仍然放过**（只许收紧「覆盖」侧，不许把合法声明判违规）。位置：`tests/a0-host-boundaries.test.ts` 的 `cssBoundaryFindings` 与 `kit.host.css.selfcheck.6/7` |
+| L-6 | 任务的 **output 必须带 acceptance 证据**（命令 + 退出码 + 关键输出） | t6 的 H1 直接成因之一：`t7` 的 output 为空 ⇒ 收尾记录写出悬空引用「具体清单见本次任务回执」（§6.2 注记）。下一轮：implementation / integration 类任务把证据写进 output；**引用别人的 output 前先确认它非空**，别让下游引用悬空 |
 
 ---
 
@@ -170,6 +180,11 @@ node --input-type=module -e "import('deer-ui').then(m=>console.log(Object.keys(m
 （`npm run build` / `npm run typecheck` / `npm run check:dist` 与上面逐条等价，见 `package.json`
 的 scripts；`npm test` = 第一条。**本轮没有跑 `npm run lint`** —— 该 script 不存在，且属明确排除项。）
 
+> **t8 复跑**：完成 C-12 那三项注释/文档订正之后，在**同一组命令**下复跑，结果逐条相同 ——
+> `assertions: 222 / ALL PASS`、`[budget] 222 = ui.* 117 + kit.*+lib.* 105`、`check-dist` OK（39 产物）。
+> t8 只改了 3 个文件（`tests/budget.test.ts`、`docs/REQUIREMENTS-freeze-C.md`、本文件），
+> `src/**` / 快照 / `package.json` / 断言与三道下限**一处未动**。
+
 ### 6.2 逐条
 
 | 不变量 | 核对结果（本轮实测） |
@@ -180,8 +195,8 @@ node --input-type=module -e "import('deer-ui').then(m=>console.log(Object.keys(m
 | **INV-C4** 依赖面不变 | `package.json` 的 `dependencies` 仍为空、`devDependencies` / `peerDependencies` 未增；`kit.purity.offenders` 空 |
 | **INV-C5** 断言只许涨 | `assertions: N` **N = 222 ≥ 143**；`REMOVED = ∅`；`ADDED = 79`（ui 46 + kit/lib 33，t5 独立 diff） |
 | **INV-C6** 预算三道下限不动 | `tests/budget.test.ts` 的 `MIN_CONTRACT=62` / `MIN_INFRA=72` / `MIN_TOTAL=134` **数值未动**（t5 复核字面；`git diff` 只有注释与新增断言） |
-| **INV-C7** 仓库不新增宿主依赖 / 不留临时文件 | `git status --porcelain` **空**（0 行）；`git diff --quiet` 退出 0；无 `*.tgz` / `dist/` / 夹具文件入版本控制（`dist/` 与 `tests/.ts-out/` 由 `.gitignore` 覆盖） |
-| **INV-C8** 结束时仍干净且全绿 | 提交 `ab051d0` + `c088878` 之后重跑 V-C1..V-C5：全部 exit 0；`assertions: 222 / ALL PASS`；`dist/styles.css` 17,790 B / 92 规则 / 326 行；`check-dist` OK（39 产物）；原生 `require` 30 / `import` 30 |
+| **INV-C7** 仓库不新增宿主依赖 / 不留临时文件 | `git status --porcelain` **空**（0 行）；`git diff --quiet` 退出 0；无 `*.tgz` / `dist/` / 夹具文件入版本控制（`dist/` 与 `tests/.ts-out/` 由 `.gitignore` 覆盖）。**t8 订正后**临时增量 = 3 个文件的注释/文档改动（`tests/budget.test.ts`、`docs/REQUIREMENTS-freeze-C.md`、本文件；无新增/删除文件、无 `*.tgz`/`dist/`/夹具），提交后应再次为空 —— 见 §6.1 的「t8 复跑」注记 |
+| **INV-C8** 结束时仍干净且全绿 | 提交 `ab051d0` + `c088878` 之后重跑 V-C1..V-C5：全部 exit 0；`assertions: 222 / ALL PASS`；`dist/styles.css` 17,790 B / 92 规则 / 326 行；`check-dist` OK（39 产物）；原生 `require` 30 / `import` 30。**t8 在注释/文档订正后复跑同一组命令，结果逐条相同**（唯一差别是 `git status` 的 3 个文件增量，待队长提交） |
 
 > **上一版这两行写错了，此处更正（t6 质量门的 H1 finding）**：原版把 INV-C7 的判据偷换成
 > 「porcelain 里没有 `*.tgz`/`dist/`/夹具文件」，并引用「本次任务回执」——而 `t7` 的 output 是空的
