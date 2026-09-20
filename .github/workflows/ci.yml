@@ -1,0 +1,30 @@
+# deer-ui CI（方案 §4.3）：npm ci / typecheck / build / 库测试 / dist 自检。
+#
+# 仓库现在**有** `package-lock.json`（联网 `npm install` 生成并入库），所以走 `npm ci` ——
+# 装上的是锁文件里那一份（版本 + integrity 都核），不受「今天 registry 上是哪个版本」影响。
+# 库必须能在没有宿主仓库（PixelCraft）的机器上跑完这一串，CI 就是这个前提的机器判据。
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: 安装依赖（按 lockfile 装，严格一致）
+        run: npm ci --no-audit --no-fund
+      - name: 类型检查（src strict + 示范页）
+        run: npm run typecheck
+      - name: 构建 dist（ESM + .d.ts）
+        run: npm run build
+      - name: 库测试（预算闸门：库自带断言总数 ≥ 123，口径见 tests/budget.test.ts 顶部）
+        run: npm test
+      - name: dist 自检（exports 目标 / 没打进 React / 无外链 / 没有 demo）
+        run: npm run check:dist

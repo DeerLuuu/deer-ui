@@ -48,11 +48,10 @@ tests/a0-host-boundaries.test.ts A0-3 不得自判 PC / 主题 / 安全区
 tests/ui-kit.test.tsx   P0b 从应用 `tests/ui-kit.test.tsx` 搬来的 62 条控件 DOM 契约断言
 tests/dom-stub.ts       自带 DOM 桩（R9：库测试不许依赖应用侧 stubEnv()）
 tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显式更新）
-scripts/tsc.mjs         解析一个可用的 tsc 再跑（三级顺序见 scripts/tsc-path.mjs）
-scripts/tsc-path.mjs    「怎么找 tsc」的唯一实现（tsc.mjs 与计数夹具共用）
-scripts/count-host-assertions.mjs  复现「宿主 ui kit 70 = 搬入 62 + 留宿主 8」的核查夹具（**不在** npm test 里）
+scripts/tsc.mjs         解析一个可用的 tsc 再跑（两级顺序见 scripts/tsc-path.mjs）
+scripts/tsc-path.mjs    「怎么找 tsc」的唯一实现（只有本仓库 node_modules 与 $DEERUI_TSC 两个来源）
 scripts/check-dist.mjs  dist 产物自检（exports 目标存在 / 没打进 React / 无外链 / 没有 demo）
-scripts/link-dev-deps.mjs 无网络环境下的 devDependency 权宜链接（见下）
+scripts/link-dev-deps.mjs 离线应急：把**显式指定**的 node_modules 链进来（必须设 $DEERUI_DEPS_SOURCE，见下）
 scripts/pack-vendor.mjs  产出应用侧约定的 deerui-<version>.tgz 并打印 sha256
 tsconfig.examples.json  示范页的类型检查（它不在 src 里，但 import 路径漂了要能红）
 ```
@@ -60,32 +59,33 @@ tsconfig.examples.json  示范页的类型检查（它不在 src 里，但 impor
 ## 命令
 
 ```sh
+npm ci                 # 按 package-lock.json 装依赖（CI 与本地首选；装完即可跑下面全部命令）
 npm run typecheck      # tsc -p tsconfig.json --noEmit（src，strict: true）
                        #   && tsc -p tsconfig.examples.json（示范页，它不在 src 里）
 npm run build          # tsc -p tsconfig.build.json → dist/（ESM + .d.ts，逐文件，无 bundler）
 npm test               # 编译 tests/ 到 tests/.ts-out 后运行；末两行是 assertions: N / ALL PASS
 npm run snapshot:barrel  # 导出面**有意**变化时更新快照（必须连同提交信息一起说明）
 npm run check:dist     # 构建产物自检（CI 在 build 之后跑）
-npm run count:host-assertions  # 复现「宿主 ui kit 70 = 搬入 62 + 留宿主 8」（只读宿主仓库，**不在** npm test 里）
 npm pack               # 出 deer-ui-0.1.0.tgz（prepack 会先 build + check:dist）
 npm run pack:vendor    # 再落一份应用侧约定的 deerui-0.1.0.tgz（见「打包与消费」）
 ```
 
-## 工具链：没有 node_modules 时怎么办
+## 依赖与工具链
 
-新仓库**没有** `node_modules`，而本机 `npm install --offline` 装不上（实测 `ENOTCACHED`：
-`npm error request to http://mirrors.cloud.tencent.com/npm/react failed: cache mode is 'only-if-cached'`）。
-两条**离线**路线（有网络的环境请直接 `npm install`，CI 就是这么做的）：
+**首选 `npm ci`**：仓库里有 `package-lock.json`（联网 `npm install` 生成并入库），照着它装即可 ——
+不需要本机另外准备 `node_modules`，也不需要**平级的 PixelCraft 检出**。库必须能在只有这一个仓库的机器上
+装完、测完、构建完（CI 与「无宿主环境」验证跑的都是这条）。
 
 1. **tsc 从哪儿来** —— `scripts/tsc.mjs` 按顺序找一个能用的 tsc，并在 stderr 打印用的是哪一个：
-   ① 本仓库 `node_modules/typescript/lib/tsc.js` → ② 环境变量 `$DEERUI_TSC` →
-   ③ **平级的 PixelCraft 检出** `../pixelcraft/node_modules/typescript/lib/tsc.js`。
+   ① 本仓库 `node_modules/typescript/lib/tsc.js` → ② 环境变量 `$DEERUI_TSC`。
    （别照抄应用侧那条 `node_modules/typescript/bin/tsc.js`：本机真路径在 `lib/tsc.js`，`bin/tsc` 只是无扩展名的 shell 包装。）
-2. **react / @types 从哪儿来** —— `npm run link:devdeps` 把平级 PixelCraft 里已经装好的
-   `typescript` / `react` / `react-dom` / `scheduler` / `loose-envify` / `js-tokens` / `csstype` / `prop-types` / `@types`
-   以 **junction** 链进本仓库的 `node_modules/`（`node_modules/` 已被 `.gitignore` 忽略，不进提交）。
-   这是**离线权宜**：链过去的 React 与宿主是同一份物理文件，反而天然满足「React 单实例」。
-   有网络时删掉 `node_modules/` 直接 `npm install` 即可，`package.json` 里该有的 devDependency 一条不少。
+2. **react / @types 从哪儿来** —— 同样来自 `npm ci`。**真的没网**时才用离线应急口子：
+   `DEERUI_DEPS_SOURCE=<某个已装好的 node_modules> npm run link:devdeps`
+   （把它里面的 `typescript` / `react` / `react-dom` / `scheduler` / `loose-envify` / `js-tokens` / `csstype` / `prop-types` / `@types`
+   以 **junction** 链进本仓库的 `node_modules/`；`node_modules/` 已被 `.gitignore` 忽略，不进提交）。
+   **来源必须显式给**：早先它默认去链平级的 `../pixelcraft/node_modules`，那是一条隐式的邻居依赖，
+   已删除（不设 `DEERUI_DEPS_SOURCE` 就直接报错退出）。链接过去的是同一份物理文件，所以顺带满足
+   「React 单实例」；但它**不是**一次真安装（不写 lockfile、不校验 integrity），只配当应急手段。
 
 > **React 必须单实例**（硬约束）：`peerDependencies` 写 `^18.3.0`，库**不**自带 React。
 > 两份 React = `Invalid hook call` + `useSyncExternalStore` 订阅表分裂；应用侧走 tarball（真目录）而不是
@@ -121,45 +121,31 @@ npm run pack:vendor    # 再落一份应用侧约定的 deerui-0.1.0.tgz（见�
 | `examples/demo.tsx` | 差 **1 行** | 第 14 行 `./index` → `../src/index`（它从 `src/ui/kit/` 挪到了 `examples/`） |
 | `src/internal/{expr,scrub}.ts` | 多 **5 行**头部 | 出处注释 + 「库不得反向 import 宿主 / 防分叉」说明；其余 87 / 60 行逐行相同 |
 
-**断言台账**（机器口径：把应用那份 `ui-kit.test.tsx` 单独编译运行一次，记录运行期断言名；一条命令可复现，见下「计数口径」）：
+**库自己的断言台账**（数法：`npm test` 末行的 `assertions: N`，构成由 `tests/common.ts` 的 `byPrefix` 打印）：
 
 | 项 | 条数 | 说明 |
 |---|---|---|
-| 应用侧 `tests/ui-kit.test.tsx`（宿主 `ui kit` 小节）运行期断言 | **70** | **不是方案里写的 112** —— 112 是错数（见下「计数口径」） |
-| └ 搬进库（`tests/ui-kit.test.tsx`） | **62** | 名字逐字保留（仍是 `ui.*`），比对结果「库侧有、应用侧没有」= **0 条**，即零改名、零削弱 |
-| └ 留在宿主侧 | **8** | `ui.demo.*` 6 条（示范页在 `examples/`，库测试不依赖它）+ `ui.overlay-full-wiring`（断言宿主 `src/ui/App.tsx` 接线）+ `ui.dropmenu.pop-css`（断言宿主 `src/ui/style.css`） |
-| 库侧运行期断言合计 | **123** | 62（搬来的）+ 61（A0-1/A0-2/A0-3/infra/预算闸门）→ 预算闸门的下限就是按这两个数写的：**≥ 123** |
+| `ui.*` 控件 DOM 契约（`tests/ui-kit.test.tsx`） | **62** | P0b 从应用侧那份**逐字搬来**：名字一条没改、条件一条没削（比对见应用仓库 `docs/PLAN-deer-ui.md` §10） |
+| `kit.*` + `lib.*`（A0-1/A0-2/A0-3 + 测试基建 + 预算闸门） | **61** | 库自己的判据与基建 |
+| **库侧运行期断言合计**（= 预算闸门下限） | **123** | 62 + 61，只许涨（`.github/workflows/ci.yml` 会跑 `npm test`） |
 
-### 计数口径（70 / 62 / 8）—— 一条命令可复现
-
-**112 是错数**（2026-09-20 修正，队长独立实测裁定）：`docs/PLAN-deer-ui.md` 里「112 条 DOM 契约断言」与
-`tests/ui-kit.test.tsx` 的实际运行条数（**70**）对不上；同一批错数还有 `i18n`（写 34、实为 **8**）与
-`uibar`（写 97/79、实为 **104**）。本仓库按**实测**记账，并把它固化下来：
+### 计数口径（库侧 123 = 62 + 61）
 
 ```sh
-# ① 一条命令复现 70 = 62 + 8（本仓库脚本，只读宿主仓库，产物全在 os.tmpdir()）
-npm run count:host-assertions          # 可选 $DEERUI_HOST_REPO 指向别的 PixelCraft 检出
-
-# ② 另一种数法（连本仓库都不需要）：在宿主仓库按小节分段数
-node tests/.ts-out/tests/run-tests.js   # 按 `--- 小节名 ---` 分段统计 `ok ` 行；
-                                        # 总数须与末尾 `assertions:` 一致（= 8090），口径才自洽
+npm test        # 末两行 `assertions: 123` / `ALL PASS`，上面另有一行 `[budget] 构成：…`
 ```
 
-`count:host-assertions` 做的事：把宿主的 `src/` 与 `node_modules/` 以 **junction** 链进临时目录（宿主一个字节都不改），
-复制宿主那份 `ui-kit.test.tsx` 当夹具编译运行，**逐条记录运行期断言名**，再和库侧同口径的名字集合比对，
-打印「宿主总数 / 搬入 / 留宿主（逐条给理由）/ 有没有改名或新增（必须 0）/ 库侧按前缀的构成」。
-三条纪律（为什么它是脚本而不是测试）：
+**应用侧那份账（宿主 `ui kit` 小节 70 = 搬入 62 + 留宿主 8）本仓库不再维护**（2026-09-20 移出）：
+P0b 时期这里有个 `scripts/count-host-assertions.mjs` 夹具（靠 junction 链宿主的 `src/` 与 `node_modules/`
+去复现 70/62/8），`tests/budget.test.ts` 里也有个 `MIN_HOST_MOVED = 62`。**两样都删了**，理由：
 
-1. **库测试不依赖宿主的 `tests/`**：夹具只活在临时目录里，`npm test` 完全不碰它；
-2. **不参与 CI**：CI 里没有宿主仓库，这条只在「两个仓库都在手边」时跑；
-3. **数字变了要两处一起改**：`tests/budget.test.ts` 的 `MIN_HOST_MOVED` 与本脚本的 `EXPECTED`（脚本会自己提示）。
+1. 那是**应用侧的账**：它读宿主 `tests/ui-kit.test.tsx`，还得宿主的安装树在手边 —— 应用侧会自己收下（含那 62 条
+   同名同义断言的收口）；
+2. 库测试**不许**依赖宿主仓库：库必须能在**没有 PixelCraft 在场**的目录里 `npm ci` + `npm test` + `npm run build`
+   （本轮独立验证就是这么跑的，见「独立安装验证」）。
 
-**给宿主侧（t3）的两条硬约束**：
-1. 应用侧 `src/ui/kit/demo.tsx` **P0b 不能删** —— 那 6 条 `ui.demo.*` 还要渲染它；按 Q8，应用侧副本到 P7 才删。
-2. 应用侧现在有 62 条断言与库侧**同名同义**（双跑窗口）。t3 把它们从应用侧删掉时，建议按名字对账：
-   `库侧 ui.* 集合 == 应用侧 ui.* 集合 − 8（上面那三条来源）`；
-   裁完之后宿主那份的总数会从 70 掉到 8 —— 那是**预期**的，届时把 `EXPECTED.host` 与
-   `tests/budget.test.ts` 的注释一起更新，别把它当成回归。
+现在 `tests/budget.test.ts` 只钉库自己的两个下限（`ui.*` 62 与 `kit.*+lib.*` 61，**分开判** —— 总数会掩盖
+「基建长胖、控件契约变少」），并且 `package.json` 里也没有 `count:host-assertions` 这条 script 了。
 
 **复制时的行尾陷阱（实测）**：两个仓库都是 `core.autocrlf=true` 且都**没有** `.gitattributes`，
 所以 PixelCraft 的**工作区**文件是 **CRLF**、而本仓库骨架阶段新建的文件是 LF。从应用侧拷文件进来**不必手工转 LF**
@@ -179,8 +165,8 @@ node tests/.ts-out/tests/run-tests.js   # 按 `--- 小节名 ---` 分段统计 `
    —— 那份清单每加一个测试要改两处，属历史包袱。`rootDir: ".."` 指向**库根**，
    `outDir: ".ts-out"` 因此落在 `tests/.ts-out/`，运行路径是 `node tests/.ts-out/tests/run-tests.js`。
 2. **不引 jsdom / vitest / puppeteer**（方案 Q7）：控件契约走 `react-dom/server` 的 `renderToStaticMarkup` +
-   静态扫描 + 自写 runner；输出末尾必须是 `assertions: N` 与 `ALL PASS` 两行，CI 的预算闸门要求
-   **N ≥ 123**（= 搬入 62 + 基建 61；前提与两种数法写在 `tests/budget.test.ts` 顶部，别再用那个错数 112）。
+   静态扫描 + 自写 runner；输出末尾必须是 `assertions: N` 与 `ALL PASS` 两行，预算闸门要求
+   **N ≥ 123**（= 库自带控件契约 62 + 判据与基建 61；口径写在 `tests/budget.test.ts` 顶部）。
    `tests/dom-stub.ts` 是自带的最小 DOM 桩（R9：**不许**依赖应用侧 `stubEnv()`）。
 3. **`src` 用 `strict: true`，`tests` 用 `strict: false`**：`src` 是本仓库新写的（不背历史包袱，方案 §4.1 说的
    「改 strict 是独立的一轮」指应用侧）；`tests` 要能直接吃下从应用侧搬来的既有测试文件，所以跟应用侧一致。
@@ -209,8 +195,30 @@ npm run pack:vendor            # → deerui-0.1.0.tgz（同时也产出 npm 自�
 
 ## CI
 
-`.github/workflows/ci.yml`：`npm install` → `typecheck` → `build` → `check:dist` → `test` → `pack --dry-run`。
-仓库当前**没有 lockfile**（离线环境生成不出来），所以 CI 用 `npm install` 而不是 `npm ci`；补锁是独立的一轮。
+`.github/workflows/ci.yml`（真文件，不是示例）：`npm ci` → `typecheck` → `build` → `test` → `check:dist`。
+
+仓库**有 `package-lock.json`**（联网 `npm install` 生成并入库），所以走 `npm ci`：装上的是锁里那一份
+（版本 + integrity 都核），不受「今天 registry 上是哪个版本」影响。CI 里**没有**、也不需要应用仓库
+（PixelCraft）在场 —— 这正是「库能独立安装与运行」这条地基的机器判据。
+
+> 若推送这次改动时 GitHub 报 token 缺 `workflow` scope（`.github/workflows/` 下的文件需要它），
+> 临时把本文件改名为 `.github/ci.yml.example` 再推即可 —— 内容一个字不用改，等换一把有该 scope 的
+> 凭据再推回去（先例：提交 `bce2647`）。
+
+## 独立安装验证（无 PixelCraft 在场）
+
+把库复制到一个**没有宿主仓库**的目录（排除 `node_modules/` 与 `.git/`），在那里跑：
+
+```sh
+npm install        # 联网真装（lockfile 已在仓库里，装完 node_modules/react 是真目录，不是指向别处的 junction）
+npm test           # assertions: 123 / ALL PASS
+npm run build      # dist/（ESM + .d.ts）
+npm run check:dist # 产物自检：OK
+```
+
+四条全绿才算过；任何残留的 `../pixelcraft/...` 回退（`scripts/tsc-path.mjs` 与 `scripts/link-dev-deps.mjs`
+里曾各有一条）都会在这种目录里当场暴露。库侧 `node_modules/` **必须**是真目录 —— 用 junction 链宿主那份
+会让「React 单实例」看起来满足，实际是两个仓库的安装树被悄悄绑在一起。
 
 ## 许可
 

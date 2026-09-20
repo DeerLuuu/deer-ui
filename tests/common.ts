@@ -10,8 +10,8 @@ export let total = 0;
 
 /**
  * 按断言名的**第一段前缀**分桶计数（`ui.*` / `kit.*` / `lib.*`）。
- * 用途：预算闸门要能钉住「**搬来的那 62 条**不许掉」，而不是只钉一个总数 ——
- * 总数会掩盖「基建长胖、搬来的变少」这种组合（`tests/budget.test.ts` 的口径，README 有记账表）。
+ * 用途：预算闸门要能钉住「**库自带的那 62 条控件契约**不许掉」，而不是只钉一个总数 ——
+ * 总数会掩盖「基建长胖、控件契约变少」这种组合（`tests/budget.test.ts` 的口径，README 有记账表）。
  */
 export const byPrefix: Record<string, number> = {};
 

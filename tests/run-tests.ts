@@ -24,9 +24,9 @@ function main(): void {
   testA0Barrel();
   console.log("--- A0-3 库内不得自判 PC / 主题 / 安全区 ---");
   testA0HostBoundaries();
-  console.log("--- 控件 DOM 契约（P0b 从 PixelCraft tests/ui-kit.test.tsx 搬来） ---");
+  console.log("--- 控件 DOM 契约（库自带；P0b 从应用侧 tests/ui-kit.test.tsx 搬来，名字逐字保留） ---");
   testUiKit();
-  console.log("--- 断言预算闸门（下限 123 = 搬入 62 + 基建 61） ---");
+  console.log("--- 断言预算闸门（库自己的下限 123 = 控件契约 62 + 判据与基建 61） ---");
   testAssertionBudget();
   finish();
 }

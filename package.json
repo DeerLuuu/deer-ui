@@ -38,7 +38,6 @@
     "test": "node scripts/tsc.mjs -p tests/tsconfig.json && node tests/.ts-out/tests/run-tests.js",
     "snapshot:barrel": "node scripts/tsc.mjs -p tests/tsconfig.json && node tests/.ts-out/tests/run-tests.js --update-barrel",
     "check:dist": "node scripts/check-dist.mjs",
-    "count:host-assertions": "node scripts/count-host-assertions.mjs",
     "pack:vendor": "node scripts/pack-vendor.mjs",
     "link:devdeps": "node scripts/link-dev-deps.mjs",
     "prepack": "npm run build && npm run check:dist"
