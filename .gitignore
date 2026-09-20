@@ -6,3 +6,6 @@ tests/.ts-out/
 
 # 一次性日志
 *.log
+
+# AgentTeams 协作状态（计划/邮箱/尝试记录）：属本地工具状态，不入库
+.agent-teams/
