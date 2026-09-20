@@ -180,8 +180,17 @@ node --input-type=module -e "import('deer-ui').then(m=>console.log(Object.keys(m
 | **INV-C4** 依赖面不变 | `package.json` 的 `dependencies` 仍为空、`devDependencies` / `peerDependencies` 未增；`kit.purity.offenders` 空 |
 | **INV-C5** 断言只许涨 | `assertions: N` **N = 222 ≥ 143**；`REMOVED = ∅`；`ADDED = 79`（ui 46 + kit/lib 33，t5 独立 diff） |
 | **INV-C6** 预算三道下限不动 | `tests/budget.test.ts` 的 `MIN_CONTRACT=62` / `MIN_INFRA=72` / `MIN_TOTAL=134` **数值未动**（t5 复核字面；`git diff` 只有注释与新增断言） |
-| **INV-C7** 仓库不新增宿主依赖 / 不留临时文件 | 本轮收尾只改文档；`git status --porcelain` 里没有 `*.tgz` / `dist/` / 夹具文件（具体清单见本次任务回执） |
-| **INV-C8** 结束时仍干净且全绿 | §6.1 五条命令全 0；`npm run check:dist` OK |
+| **INV-C7** 仓库不新增宿主依赖 / 不留临时文件 | `git status --porcelain` **空**（0 行）；`git diff --quiet` 退出 0；无 `*.tgz` / `dist/` / 夹具文件入版本控制（`dist/` 与 `tests/.ts-out/` 由 `.gitignore` 覆盖） |
+| **INV-C8** 结束时仍干净且全绿 | 提交 `ab051d0` + `c088878` 之后重跑 V-C1..V-C5：全部 exit 0；`assertions: 222 / ALL PASS`；`dist/styles.css` 17,790 B / 92 规则 / 326 行；`check-dist` OK（39 产物）；原生 `require` 30 / `import` 30 |
+
+> **上一版这两行写错了，此处更正（t6 质量门的 H1 finding）**：原版把 INV-C7 的判据偷换成
+> 「porcelain 里没有 `*.tgz`/`dist/`/夹具文件」，并引用「本次任务回执」——而 `t7` 的 output 是空的
+> （悬空引用）；「结束时仍干净」当时也与事实相反：**HEAD 仍是 `032698d`、本轮零提交、
+> porcelain 13 行**（11 M + 2 ??）、`git diff --quiet` 退出 1。
+> 即冻结口径的 PASS 判据当时**没有成立**，而收尾记录写成了成立——这是本轮唯一的 high，
+> 且**不合格的是集成收尾这一步，`t3`/`t4` 的产物不受影响**（t6 独立复跑确认其实质全部成立）。
+> 处置：由队长提交那 13 个文件（`ab051d0` tests + `c088878` docs），再重跑 V-C1..V-C5，
+> 然后更正本表这两行。
 
 ### 6.3 本轮明确**没有**声明的事（诚实性纪律）
 
