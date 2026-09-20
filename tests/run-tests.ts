@@ -26,7 +26,7 @@ function main(): void {
   testA0HostBoundaries();
   console.log("--- 控件 DOM 契约（P0b 从 PixelCraft tests/ui-kit.test.tsx 搬来） ---");
   testUiKit();
-  console.log("--- 断言预算闸门（P0b 起 ≥ 112） ---");
+  console.log("--- 断言预算闸门（下限 123 = 搬入 62 + 基建 61） ---");
   testAssertionBudget();
   finish();
 }

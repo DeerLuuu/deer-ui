@@ -8,8 +8,21 @@ export let fails = 0;
 /** 真正跑过的断言条数（eq + ok）。由 finish() 打印，文档里的数字才可复现。 */
 export let total = 0;
 
+/**
+ * 按断言名的**第一段前缀**分桶计数（`ui.*` / `kit.*` / `lib.*`）。
+ * 用途：预算闸门要能钉住「**搬来的那 62 条**不许掉」，而不是只钉一个总数 ——
+ * 总数会掩盖「基建长胖、搬来的变少」这种组合（`tests/budget.test.ts` 的口径，README 有记账表）。
+ */
+export const byPrefix: Record<string, number> = {};
+
+function bump(name: string): void {
+  const p = name.split(".")[0];
+  byPrefix[p] = (byPrefix[p] || 0) + 1;
+}
+
 export function eq(name: string, a: unknown, b: unknown): void {
   total++;
+  bump(name);
   const same = JSON.stringify(a) === JSON.stringify(b);
   if (!same) {
     fails++;
@@ -21,6 +34,7 @@ export function eq(name: string, a: unknown, b: unknown): void {
 
 export function ok(name: string, cond: boolean, detail = ""): void {
   total++;
+  bump(name);
   if (!cond) {
     fails++;
     console.log("FAIL " + name + (detail ? "  " + detail : ""));

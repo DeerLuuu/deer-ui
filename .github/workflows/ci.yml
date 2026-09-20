@@ -18,13 +18,15 @@ jobs:
           node-version: "20"
       - name: 安装依赖（无 lockfile → install）
         run: npm install --no-audit --no-fund
-      - name: 类型检查（src，strict）
+      - name: 类型检查（src strict + 示范页）
         run: npm run typecheck
       - name: 构建 dist（ESM + .d.ts）
         run: npm run build
-      - name: dist 自检（exports 目标 / 没打进 React / 无外链）
+      - name: dist 自检（exports 目标 / 没打进 React / 无外链 / 没有 demo）
         run: npm run check:dist
-      - name: 库测试（断言 N ≥ 112 由 tests/budget.test.ts 在 P0b 后自动生效）
+      - name: 库测试（预算闸门下限 123 = 搬入 62 + 基建 61，前提与数法见 tests/budget.test.ts 顶部）
         run: npm test
       - name: 打包干跑
         run: npm pack --dry-run
+      # 注意：`npm run count:host-assertions`（复现「宿主 ui kit 70 = 搬入 62 + 留宿主 8」）**不在这里跑**：
+      # 它需要宿主 PixelCraft 检出，属于「两个仓库都在手边」时的核查手段。

@@ -48,7 +48,9 @@ tests/a0-host-boundaries.test.ts A0-3 不得自判 PC / 主题 / 安全区
 tests/ui-kit.test.tsx   P0b 从应用 `tests/ui-kit.test.tsx` 搬来的 62 条控件 DOM 契约断言
 tests/dom-stub.ts       自带 DOM 桩（R9：库测试不许依赖应用侧 stubEnv()）
 tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显式更新）
-scripts/tsc.mjs         解析一个可用的 tsc（本地 → $DEERUI_TSC → 平级 PixelCraft）
+scripts/tsc.mjs         解析一个可用的 tsc 再跑（三级顺序见 scripts/tsc-path.mjs）
+scripts/tsc-path.mjs    「怎么找 tsc」的唯一实现（tsc.mjs 与计数夹具共用）
+scripts/count-host-assertions.mjs  复现「宿主 ui kit 70 = 搬入 62 + 留宿主 8」的核查夹具（**不在** npm test 里）
 scripts/check-dist.mjs  dist 产物自检（exports 目标存在 / 没打进 React / 无外链 / 没有 demo）
 scripts/link-dev-deps.mjs 无网络环境下的 devDependency 权宜链接（见下）
 scripts/pack-vendor.mjs  产出应用侧约定的 deerui-<version>.tgz 并打印 sha256
@@ -64,6 +66,7 @@ npm run build          # tsc -p tsconfig.build.json → dist/（ESM + .d.ts，�
 npm test               # 编译 tests/ 到 tests/.ts-out 后运行；末两行是 assertions: N / ALL PASS
 npm run snapshot:barrel  # 导出面**有意**变化时更新快照（必须连同提交信息一起说明）
 npm run check:dist     # 构建产物自检（CI 在 build 之后跑）
+npm run count:host-assertions  # 复现「宿主 ui kit 70 = 搬入 62 + 留宿主 8」（只读宿主仓库，**不在** npm test 里）
 npm pack               # 出 deer-ui-0.1.0.tgz（prepack 会先 build + check:dist）
 npm run pack:vendor    # 再落一份应用侧约定的 deerui-0.1.0.tgz（见「打包与消费」）
 ```
@@ -118,23 +121,45 @@ npm run pack:vendor    # 再落一份应用侧约定的 deerui-0.1.0.tgz（见�
 | `examples/demo.tsx` | 差 **1 行** | 第 14 行 `./index` → `../src/index`（它从 `src/ui/kit/` 挪到了 `examples/`） |
 | `src/internal/{expr,scrub}.ts` | 多 **5 行**头部 | 出处注释 + 「库不得反向 import 宿主 / 防分叉」说明；其余 87 / 60 行逐行相同 |
 
-**断言台账**（机器口径：用 `%TEMP%` 的计数夹具把应用那份 `ui-kit.test.tsx` 单独编译运行一次，记录运行期断言名）：
+**断言台账**（机器口径：把应用那份 `ui-kit.test.tsx` 单独编译运行一次，记录运行期断言名；一条命令可复现，见下「计数口径」）：
 
 | 项 | 条数 | 说明 |
 |---|---|---|
-| 应用侧 `tests/ui-kit.test.tsx` 运行期断言 | **70** | 不是方案里写的 112（见下「112 的差异」） |
+| 应用侧 `tests/ui-kit.test.tsx`（宿主 `ui kit` 小节）运行期断言 | **70** | **不是方案里写的 112** —— 112 是错数（见下「计数口径」） |
 | └ 搬进库（`tests/ui-kit.test.tsx`） | **62** | 名字逐字保留（仍是 `ui.*`），比对结果「库侧有、应用侧没有」= **0 条**，即零改名、零削弱 |
 | └ 留在宿主侧 | **8** | `ui.demo.*` 6 条（示范页在 `examples/`，库测试不依赖它）+ `ui.overlay-full-wiring`（断言宿主 `src/ui/App.tsx` 接线）+ `ui.dropmenu.pop-css`（断言宿主 `src/ui/style.css`） |
-| 库侧运行期断言合计 | **123** | 62（搬来的）+ 61（A0-1/A0-2/A0-3/infra/预算闸门）—— 预算闸门 `≥ 112` 因此成立 |
+| 库侧运行期断言合计 | **123** | 62（搬来的）+ 61（A0-1/A0-2/A0-3/infra/预算闸门）→ 预算闸门的下限就是按这两个数写的：**≥ 123** |
 
-**112 的差异**（必须写清楚，免得下一轮以为丢了 42 条）：`docs/PLAN-deer-ui.md` 里「112 条 DOM 契约断言」这个数字
-与 `tests/ui-kit.test.tsx` 的实际运行条数（70）对不上；本仓库按**实测**记账（夹具与结果都在 `%TEMP%`，
-可复现：`node deerui-hostcount-setup.mjs` → 编译 → `node deerui-names.cjs …`）。要核 112 的来源，得回应用仓库重新数一遍。
+### 计数口径（70 / 62 / 8）—— 一条命令可复现
+
+**112 是错数**（2026-09-20 修正，队长独立实测裁定）：`docs/PLAN-deer-ui.md` 里「112 条 DOM 契约断言」与
+`tests/ui-kit.test.tsx` 的实际运行条数（**70**）对不上；同一批错数还有 `i18n`（写 34、实为 **8**）与
+`uibar`（写 97/79、实为 **104**）。本仓库按**实测**记账，并把它固化下来：
+
+```sh
+# ① 一条命令复现 70 = 62 + 8（本仓库脚本，只读宿主仓库，产物全在 os.tmpdir()）
+npm run count:host-assertions          # 可选 $DEERUI_HOST_REPO 指向别的 PixelCraft 检出
+
+# ② 另一种数法（连本仓库都不需要）：在宿主仓库按小节分段数
+node tests/.ts-out/tests/run-tests.js   # 按 `--- 小节名 ---` 分段统计 `ok ` 行；
+                                        # 总数须与末尾 `assertions:` 一致（= 8090），口径才自洽
+```
+
+`count:host-assertions` 做的事：把宿主的 `src/` 与 `node_modules/` 以 **junction** 链进临时目录（宿主一个字节都不改），
+复制宿主那份 `ui-kit.test.tsx` 当夹具编译运行，**逐条记录运行期断言名**，再和库侧同口径的名字集合比对，
+打印「宿主总数 / 搬入 / 留宿主（逐条给理由）/ 有没有改名或新增（必须 0）/ 库侧按前缀的构成」。
+三条纪律（为什么它是脚本而不是测试）：
+
+1. **库测试不依赖宿主的 `tests/`**：夹具只活在临时目录里，`npm test` 完全不碰它；
+2. **不参与 CI**：CI 里没有宿主仓库，这条只在「两个仓库都在手边」时跑；
+3. **数字变了要两处一起改**：`tests/budget.test.ts` 的 `MIN_HOST_MOVED` 与本脚本的 `EXPECTED`（脚本会自己提示）。
 
 **给宿主侧（t3）的两条硬约束**：
 1. 应用侧 `src/ui/kit/demo.tsx` **P0b 不能删** —— 那 6 条 `ui.demo.*` 还要渲染它；按 Q8，应用侧副本到 P7 才删。
 2. 应用侧现在有 62 条断言与库侧**同名同义**（双跑窗口）。t3 把它们从应用侧删掉时，建议按名字对账：
-   `库侧 ui.* 集合 == 应用侧 ui.* 集合 − 8（上面那三条来源）`。
+   `库侧 ui.* 集合 == 应用侧 ui.* 集合 − 8（上面那三条来源）`；
+   裁完之后宿主那份的总数会从 70 掉到 8 —— 那是**预期**的，届时把 `EXPECTED.host` 与
+   `tests/budget.test.ts` 的注释一起更新，别把它当成回归。
 
 **复制时的行尾陷阱（实测）**：两个仓库都是 `core.autocrlf=true` 且都**没有** `.gitattributes`，
 所以 PixelCraft 的**工作区**文件是 **CRLF**、而本仓库骨架阶段新建的文件是 LF。从应用侧拷文件进来**不必手工转 LF**
@@ -154,7 +179,8 @@ npm run pack:vendor    # 再落一份应用侧约定的 deerui-0.1.0.tgz（见�
    —— 那份清单每加一个测试要改两处，属历史包袱。`rootDir: ".."` 指向**库根**，
    `outDir: ".ts-out"` 因此落在 `tests/.ts-out/`，运行路径是 `node tests/.ts-out/tests/run-tests.js`。
 2. **不引 jsdom / vitest / puppeteer**（方案 Q7）：控件契约走 `react-dom/server` 的 `renderToStaticMarkup` +
-   静态扫描 + 自写 runner；输出末尾必须是 `assertions: N` 与 `ALL PASS` 两行，CI 断言 **N ≥ 112**（P0b 起硬门）。
+   静态扫描 + 自写 runner；输出末尾必须是 `assertions: N` 与 `ALL PASS` 两行，CI 的预算闸门要求
+   **N ≥ 123**（= 搬入 62 + 基建 61；前提与两种数法写在 `tests/budget.test.ts` 顶部，别再用那个错数 112）。
    `tests/dom-stub.ts` 是自带的最小 DOM 桩（R9：**不许**依赖应用侧 `stubEnv()`）。
 3. **`src` 用 `strict: true`，`tests` 用 `strict: false`**：`src` 是本仓库新写的（不背历史包袱，方案 §4.1 说的
    「改 strict 是独立的一轮」指应用侧）；`tests` 要能直接吃下从应用侧搬来的既有测试文件，所以跟应用侧一致。
