@@ -2,7 +2,7 @@
   "name": "deer-ui",
   "version": "0.1.0",
   "private": true,
-  "description": "deer-ui — PixelCraft 的 UI 表现层独立成库（React 18 控件 + 自带样式，bundler-only：相对 import 不带 .js 后缀、不发 CJS；v0 不发 npm，只以 tarball 交付（见 README）。",
+  "description": "deer-ui — 独立的 React 18 控件库：控件的 DOM 契约、行为与无障碍属性，自带设计令牌与控件样式（deer-ui/styles.css），零运行时依赖（react/react-dom 仅为 peer）。bundler-only：相对 import 不带 .js 后缀、不发 CJS；v0 不发 npm，只以 tarball 交付（见 README）。",
   "license": "MIT",
   "sideEffects": [
     "*.css"
