@@ -5,7 +5,8 @@
 
 - **公开仓库**：<https://github.com/DeerLuuu/deer-ui>（public，MIT）
 - **零运行时依赖**：`react` / `react-dom` 只是 peer，**不带** React
-- **无构建框架**：`tsc` 出逐文件 ESM + `.d.ts`；`tsc` 不拷 CSS，所以 `build` 是「`tsc` → 拼样式」两步
+- **无构建框架**：`tsc` 出逐文件产物（ESM + `.d.ts`，以及第二次 `tsc` 出的 CJS），不引 bundler；
+  `tsc` 不拷 CSS，所以 `build` 是「两遍 `tsc` → 拼样式」
 - **未发 npm**：`private: true`，v0 只以 tarball / git 依赖交付（原因见「发布面」）
 - **源码真相只在这个仓库**：宿主不得在自己的树里改副本或 `node_modules/deer-ui` —— 改控件来这里改
 
@@ -50,9 +51,20 @@ git clone https://github.com/DeerLuuu/deer-ui.git deer-ui && cd deer-ui && npm c
 1. **React 必须单实例**：`peerDependencies` 写 `react` / `react-dom` `^18.3.0`。
    两份 React = `Invalid hook call` + `useSyncExternalStore` 订阅表分裂。
    宿主装 `file:` **目录**（而非 tarball）时 npm 可能装成指向源目录的 symlink，容易连带出第二份 `react`；装成**真目录**没有这个问题。
-2. **消费者必须是打包器**（bundler-only）：`dist` 是逐文件的 ESM，相对 import **不带 `.js` 后缀**，
-   **不发 CJS**，`package.json` 也不写 `"type": "module"`。所以 `node` / `require()` 直接吃 `dist` 会失败
-   —— 消费者只允许是打包器（esbuild / vite / webpack 都行）或浏览器。
+2. **同时提供 ESM 与 CJS 两份产物**（双格式）：`exports` 的每个 JS 子入口都给出
+   `{ types, import, require }` 三个条件（`types` 必须排第一）。相对 import **带 `.js` 后缀**，
+   `dist/` 是 ESM 树、`dist/cjs/` 是 CJS 树，两棵树各带一份作用域 `package.json`
+   （`{"type":"module"}` / `{"type":"commonjs"}`）。所以**原生 `node` 也能直接用**：
+
+   ```sh
+   node -e "console.log(Object.keys(require('deer-ui')).length)"          # → 30
+   node --input-type=module -e "import('deer-ui').then(m=>console.log(Object.keys(m).length))"   # → 30
+   ```
+
+   ⚠️ **一个应用只用一种格式**：`tooltip` / `pcmode` 是模块级单例，CJS 与 ESM 各有一份实例，
+   混用会让订阅表分裂、长按提示**静默消失**。检测办法：
+   `require('deer-ui/kit').setKitPcMode === (await import('deer-ui/kit')).setKitPcMode` 为 `false` 即中招。
+   打包器不会混用；只有同一工程里既有 `require` 又有 `import` 同一子入口时才需要留意。
 3. **样式是最先加载的**：库段必须在应用自己的样式表**之前**引入。同优先级的选择器**后写的赢**；
    反过来的话，应用想覆写库的令牌/基础规则就得靠提高选择器权重。
 
@@ -142,9 +154,22 @@ import { TabBar, DropMenu } from "deer-ui/tabs";
 
 `showTip` / `hideTip` / `subscribeTip`（类型 `Tip`）。**模块级可变单例**，见上文「隐式依赖」。
 
+### 产物形态（两棵树）
+
+| 树 | 位置 | 内容 |
+|---|---|---|
+| ESM | `dist/*.js` + `dist/*.d.ts` | `exports` 的 `import` 条件指这里；类型声明只在这一棵 |
+| CJS | `dist/cjs/*.js` | `exports` 的 `require` 条件指这里 |
+| 样式 | `dist/styles.css` | 两棵树共用这一份（不在 `dist/cjs/` 里重复） |
+
+两棵树各自带一份**作用域** `package.json`（`dist/package.json` = `{"type":"module"}`、
+`dist/cjs/package.json` = `{"type":"commonjs"}`），由 `scripts/build-styles.mjs` 在构建收尾时写出并确认进包。
+根 `package.json` **有意不写 `type` 字段** —— 加了会把 `tests/.ts-out/*.js` 这批 CJS 产物当 ESM 炸掉。
+
 ### `deer-ui`（根入口）— 30 个值 + 9 个类型
 
 只做 re-export（`index.ts` 不许写实现，A0-2 的 `kit.barrel.reexport-only` 盯着这条）：三个子入口的并集。
+**四种模块格式各一套**：上面五个入口（4 个 JS + 1 个 CSS）在 `require` 与 `import` 两条路径下都能解析。
 
 ### `deer-ui/styles.css` — 非 JS 入口
 
@@ -198,7 +223,7 @@ import { TabBar, DropMenu } from "deer-ui/tabs";
 npm ci                 # 按 package-lock.json 装依赖（CI 与本地首选）；装完会顺带跑一次 prepare（= build）
 npm run typecheck      # tsc -p tsconfig.json --noEmit（src，strict: true）
                        #   && tsc -p tsconfig.examples.json（示范页，它不在 src 里）
-npm run build          # tsc -p tsconfig.build.json → dist/（ESM + .d.ts，逐文件，无 bundler）
+npm run build          # 两遍 tsc：ESM + .d.ts 进 dist/，CJS 进 dist/cjs/（逐文件，无 bundler）
                        #   && node scripts/build-styles.mjs → dist/styles.css（打印字节数/规则数）
 npm test               # 编译 tests/ 到 tests/.ts-out 后运行；末两行是 assertions: 143 / ALL PASS
 npm run snapshot:barrel # 导出面**有意**变化时更新快照（必须连同提交信息一起说明）
@@ -279,8 +304,9 @@ tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显
 |---|---|
 | `npm run typecheck` | exit 0（src strict + 示范页） |
 | `npm test` | `assertions: 143` / `ALL PASS`（预算下限 134 = 62 + 72，未动） |
-| `npm run build` | `dist/` 25 个文件；`styles.css` **17,790 B / 92 条规则** |
+| `npm run build` | `dist/` **39 个文件**（ESM 树 + `dist/cjs/` CJS 树，两棵树各带作用域 `package.json`）；`styles.css` **17,790 B / 92 条规则** |
 | `npm run check:dist` | OK |
+| 原生加载 | `require('deer-ui')` → 30 个导出；`import('deer-ui')` → 30 个导出；`require('deer-ui/kit')` → 25 |
 
 **其中一部分有公网机器判据**：GitHub Actions 工作流 `ci`（`.github/workflows/ci.yml`）在
 `master` 上跑过并 `success`。⚠️ 截至 **`9fa9de3` 为止全仓库只触发过 1 次运行** —— 此前工作流文件
@@ -298,9 +324,20 @@ CI 里**没有、也不需要**任何宿主仓库在场 —— 这正是「库�
 ## 已知缺口（别让它们消失）
 
 - **令牌是超集**（143 定义 / 34 被库引用）：见「样式与令牌」，收敛是一次有意的改动。
-- **公开组件 `Keep` 至今零直接断言**；`useBlankTap` 同样零断言。`ScrubNum` 的键盘 / 指针路径、
-  `tabs` 的滚动 / portal 行为**没有黄金 md5 兜底**。当前的行为保证来自「源码与宿主 HEAD 逐字节同一
-  + `dist` 是 `src` 的忠实产物 + 注入负例」，证不到这几处细节。
+- **公开组件零直接断言的不止两个**：实测是 **12 个** —— `Keep` · `TipHost` · `useBlankTap` ·
+  `useLandscape` · `TabBar` · `showTip` · `hideTip` · `subscribeTip` · `setKitPcMode` · `kitPcOn` ·
+  `useKitPcMode` · `useHoverTipsEnabled`。（更早的盘点列出 14 个，含 `Overlay` 与 `DropMenu`；
+  那两个在本轮修 BUG-1 时已补上断言：`ui.overlay-full` 与 3 条 `ui.dropmenu.*`。）
+  `ScrubNum` 的键盘 / 指针路径、`tabs` 的滚动 / portal 行为**没有黄金 md5 兜底**。当前的行为保证来自
+  「源码与宿主 HEAD 逐字节同一 + `dist` 是 `src` 的忠实产物 + 注入负例」，证不到这几处细节。
+- **公开导出面判据对类型级再导出不可见**：`tests/scan.ts` 的 `reStar` 只匹配裸 `export * from`，
+  识别不了 `export type * from "…"`。后果：往 `src/kit/index.ts` 加一行 `export type * from "./secret"`
+  再跑 `snapshot:barrel`，会 `ALL PASS` 而快照不变，但消费者能 `import type { SecretApi } from "deer-ui/kit"`
+  成功。**A0-2 也是三条 A0 判据里唯一没有自检段的**。修法与已验证的补丁草稿见
+  [`docs/NEXT-round-B.md`](docs/NEXT-round-B.md) §1。
+- **混用两种模块格式会让单例分裂**：见上文「三条硬要求」第 2 条。`tooltip` / `pcmode` 是模块级单例，
+  CJS 与 ESM 是两份实例，同一工程里混用同一子入口会让长按提示**静默消失**（无任何报错）。
+  库侧目前没有运行时检测，只有上面那条 `===` 比较可以自检。
 - **无障碍只做了一半**：`Dialog` 有 `role="dialog"` + `aria-modal`，但**没有焦点陷阱、不开焦点、关闭后不归还焦点**；
   遮罩不是 portal；`TipHost` 的提示没有 `aria-live`。
 - **三端兼容（`file://` / 旧 WebView）只能静态守**：本机没有 Android 设备，不许以「已核」口吻写进度。
@@ -309,11 +346,19 @@ CI 里**没有、也不需要**任何宿主仓库在场 —— 这正是「库�
 - **样式归属判据比它读起来弱**：`kit.styles.kit-classes-owned` 只证明 `kit.css` 里出现的 class
   在库源码的**字符串字面量**里出现过；一条注入了 `display:none` 的 `.dlg` 规则能过。类名拼错 / 规则漏写
   目前**没有机器兜底**。
-- **预算闸门钉的是断言「条数」不是覆盖率**：涨条数不会自动带来覆盖，`Keep` / `useBlankTap` 可以一直是 0 条。
-- **`tests/budget.test.ts` 的注释里有一处过期数字（属 t9 范围，本轮只登记不改）**：它写「新增 7 条
-  （2+2+4）」，实测是 **+9**（`ui-kit` 53 → 56 = +3：`ui.dropmenu.layout-effect-deps`、
-  `ui.scrubnum.bounds-live`、`ui.scrubnum.bounds-ref`；新文件 `ui-hooks` 6 条）。**闸门本身是对的** ——
-  三道下限 `134 / 62 / 72` 一行未动（见上一节台账），错的只是那句注释的分解。
+- **预算闸门钉的是断言「条数」不是覆盖率**：涨条数不会自动带来覆盖。实测过的作弊路径：
+  「删 5 条真断言 + 插 5 条 `ui.filler`」能让 `assertions:` 与三道下限原值维持、闸门全绿。
+  防它只能靠与 HEAD 版逐符号 diff 确认 `REMOVED=[]`（本轮就是这么复核的）。
+- **A0-1 的 `escape` 判定依赖目标文件真实存在**：`resolveSpec` 要 `existsSync`，所以一条指向**不存在**的
+  库外路径（如 `../../engine/expr.js`）会被判 `unresolved` 而不是 `escape`。判据仍会红（`offenders` 非空），
+  但归因会不准；这是既有行为，不是双格式改造引入的。
+- **`tests/budget.test.ts:24` 的注释是一处过期数字**：写「新增 7 条（2+2+4）」，实测是 **+9**
+  （`ui-kit` 53 → 56 = +3：`ui.dropmenu.layout-effect-deps`、`ui.scrubnum.bounds-live`、
+  `ui.scrubnum.bounds-ref`；新文件 `ui-hooks` 6 条）。**闸门本身是对的** —— 三道下限 `134 / 62 / 72`
+  一行未动，错的只是那句注释的分解。
+- **lint / format 工具链完全缺失**：全仓库没有 ESLint / Prettier 配置，也没有 `npm run lint`
+  （`src/kit/scrub.tsx` 里那句 `eslint-disable` 注解在本轮已删除）。引入时该加 `lint` / `format` /
+  `format:check` 三条 script，并接进 `.github/workflows/ci.yml` 的 `npm ci` 之后、`typecheck` 之前。
 - **示范页目前跑不起来**：`examples/demo.tsx` 文件头写的启动命令指向宿主的 `toolchain/devserver.js`，
   那个文件**不在本仓库**；仓库里也没有任何 sprite 定义，所以即使跑起来，`Icon` 也全是空 `<use>`。
   它现在的价值是「一份只吃库样式的消费样板」，并且被 `npm run typecheck` 检查着不让它烂掉。

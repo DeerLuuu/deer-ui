@@ -3,8 +3,8 @@
 // All of them are pure layout + callbacks (docs/UI.md §2.2–2.6); the app layer
 // supplies translated strings and the Session wiring.
 import React from "react";
-import { ScrubNum } from "./scrub";
-import type { ScrubNumProps } from "./scrub";
+import { ScrubNum } from "./scrub.js";
+import type { ScrubNumProps } from "./scrub.js";
 
 export interface RowProps {
   /** small caption above the control (.rowlabel) */

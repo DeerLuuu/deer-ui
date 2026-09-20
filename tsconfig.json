@@ -3,18 +3,22 @@
   //   tsc -p tsconfig.json --noEmit   → 类型检查（npm run typecheck）
   //   tsc -p tsconfig.build.json      → 产出 dist（npm run build，见那个文件）
   //
-  // 三条「不要改回去」（方案 §3.1/§4.1 + AGENTS.md §6.8）：
+  // 四条「不要改回去」（方案 §3.1/§4.1 + AGENTS.md §6.8，本轮按双格式产物修订）：
   // ① jsx 必须是 react-jsx：宿主 esbuild 按「源文件往上最近的 tsconfig.json」决定 JSX 变换，
   //    任何一份少了这个字段的 tsconfig 都会让产物退回「引用全局 React」的白屏包。
-  // ② moduleResolution: Bundler + 不带后缀的相对 import 是**有意的**（方案 Q4 选 (b) bundler-only）。
-  //    README 已声明：node 直接 import dist 会失败，消费者只允许是打包器 / 浏览器。
+  // ② moduleResolution 是 **NodeNext**（本轮从 Bundler 改过来）：产物要能被**原生**
+  //    `require()` / `import()` 解析，而 Node 的解析器**不补后缀、不认目录** —— 所以库内每条相对
+  //    import 都写成 `./x.js` 形态，而 NodeNext 正是那个会**强制**这件事的解析模式（Bundler 会放过）。
+  //    注意：本仓库根 package.json **没有** `type` 字段（有意不加，见 tsconfig.build.json 的说明），
+  //    所以这里的 NodeNext 只用它的「解析语义」；**产出格式由 tsconfig.build.json 显式指定**，
+  //    不靠 `type` 字段推断。
   // ③ strict: true（本库新建，不背历史包袱；应用侧仍是 false）。
-  // ④ 不引 bundler：一条 tsc 同时出 ESM + .d.ts，不引 vite/rollup/tsup（方案 §9 第 11 条）。
+  // ④ 不引 bundler：一条 tsc 出 ESM + .d.ts，第二遍 tsc 出 CJS，不引 vite/rollup/tsup（方案 §9 第 11 条）。
   "compilerOptions": {
     "target": "ES2020",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,

@@ -4,8 +4,8 @@
 // `padTitle`; src/ui/base.tsx wraps this with the app's i18n text.
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { evalExpr } from "../internal/expr";
-import { SCRUB_DEAD_PX, scrubValue, takeNotches, wheelNotches } from "../internal/scrub";
+import { evalExpr } from "../internal/expr.js";
+import { SCRUB_DEAD_PX, scrubValue, takeNotches, wheelNotches } from "../internal/scrub.js";
 
 export interface ScrubNumProps {
   value: string | number;

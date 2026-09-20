@@ -12,13 +12,17 @@
  * `src/kit/scrub.tsx` 的 2 行 import 指向内联进来的 `src/internal/*`），这三行 re-export 把
  * **25 个值 + 6 个类型**（kit）、`TabBar`/`DropMenu`（tabs）、`showTip`/`hideTip`/`subscribeTip`（tooltip）
  * 全部抬上了公开面（数字见 `tests/snapshots/barrel-exports.json`）。
+ *
+ * ⚠️ **「与应用侧逐字节同一」不再是全局事实**（本轮双格式产物）：库内**每条相对 import 都补了 `.js` 后缀**，
+ * 因为产物要能被**原生** `require()` / `import()` 解析（Node 的解析器不补后缀、不认目录）。所以
+ * 「逐字节复制」这条血缘记载今后只对**除 import 行以外**的正文成立 —— 那些差异是库侧的有意分歧，不是漂移。
  */
 
 /** 控件族：Dialog / Form / primitives / scrub / HoverTip / pcmode 的 barrel。 */
-export * from "./kit";
+export * from "./kit/index.js";
 
 /** 标签页与下拉菜单（`tabs.tsx`；`kit/index.ts` 里没有它们，所以必须在根入口补这一行）。 */
-export * from "./tabs";
+export * from "./tabs.js";
 
 /** 长按 / 悬停提示的模块级单例（**库独占**：宿主那份 `src/ui/tooltip.ts` 必须改成再导出或删掉，见方案 R10）。 */
-export * from "./tooltip";
+export * from "./tooltip.js";

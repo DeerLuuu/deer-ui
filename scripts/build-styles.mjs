@@ -16,8 +16,14 @@
  *      不可复现）。归一的是行尾，不是声明 —— 规则内容逐字节不变。
  *   ③ **报告产物本身**：打印字节数与规则条数 —— 「构建成功」不等于「产物里有东西」（AGENTS.md §7 记过
  *      「脚本没打、看起来像环境坑」的教训）。
+ *   ④ **构建收尾（本轮新增）**：给两棵产物树各写一个「格式作用域」`package.json`
+ *      （`dist/` = `type: module`、`dist/cjs/` = `type: commonjs`）。它属于「一遍源码两遍 tsc」这条链的
+ *      **最后一步**，所以落在这个必然执行的收尾脚本里，而不是让 `build` 脚本去写 `node -e` 的引号体操。
+ *      为什么需要它：根 `package.json` **有意不加** `type`（那会连带改掉全仓库对 `.js` 的解析语义 ——
+ *      `tests/.ts-out/*.js` 是 tsc 出的 CommonJS，`scripts/*.mjs` 与 `examples/` 也在同一棵树里），
+ *      于是两棵树的格式必须由各自的 `package.json` 声明，否则 Node 会把 ESM 产物按 CommonJS 解析而当场报错。
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -53,3 +59,19 @@ const bytes = Buffer.byteLength(out, "utf8");
 console.log("[deer-ui] " + OUT + "："
   + bytes + " B / " + countRules(out) + " 条规则 / " + out.split("\n").length + " 行"
   + "（" + parts.map((p) => p.rel + " " + Buffer.byteLength(p.text, "utf8") + " B").join(" + ") + "）");
+
+// ---- 构建收尾：两棵产物树的「格式作用域」package.json（见文件头 ④） ----
+// 只在目录已存在时写：CJS 那趟（第二遍 tsc --outDir dist/cjs）没跑时不凭空造目录，好让 check:dist
+// 如实报「dist/cjs 里没有 .js」而不是被一个空目录骗过去。
+const FORMAT_SCOPES = [
+  { dir: "dist", type: "module" },
+  { dir: "dist/cjs", type: "commonjs" },
+];
+const scopes = [];
+for (const { dir, type } of FORMAT_SCOPES) {
+  const abs = path.join(libRoot, dir);
+  if (!existsSync(abs)) continue;
+  writeFileSync(path.join(abs, "package.json"), JSON.stringify({ type }, null, 2) + "\n", "utf8");
+  scopes.push(dir + "/package.json(" + type + ")");
+}
+console.log("[deer-ui] 产物格式作用域：" + (scopes.length ? scopes.join(" + ") : "（没有——check:dist 会报缺）"));

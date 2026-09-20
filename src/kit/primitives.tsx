@@ -5,14 +5,17 @@
 // just one consumer). Consumers import it as `deer-ui/kit`; a second copy of the
 // implementation anywhere else is a fork, not a re-export.
 import React, { useEffect, useRef, useState } from "react";
-import { showTip, hideTip, subscribeTip } from "../tooltip";
-import { useHoverTip } from "./HoverTip";
+import { showTip, hideTip, subscribeTip } from "../tooltip.js";
+import { useHoverTip } from "./HoverTip.js";
 
 /** true whenever landscape: side-rail layout is used on every device */
 export function useLandscape(): boolean {
   const mq = "(orientation: landscape)";
   const [land, setLand] = useState(() => (typeof window === "undefined" ? false : window.matchMedia(mq).matches));
   useEffect(() => {
+    // SSR（renderToStaticMarkup / react-dom/server）下没有 window：初值那条路已经守住了，
+    // effect 这条也必须守住 —— 否则真实 SSR 运行时这里会 ReferenceError（BUG-6）。
+    if (typeof window === "undefined") return;
     const m = window.matchMedia(mq);
     const fn = () => setLand(m.matches);
     m.addEventListener("change", fn);

@@ -1,9 +1,25 @@
 {
-  // 出 dist 用的配置：与 tsconfig.json 完全一致，只多一条排除。
+  // 出 dist 用的配置：**双格式产物的第一趟**（ESM + `.d.ts`，落到 `dist/`）。
+  // 第二趟是 CJS（落到 `dist/cjs/`），由 `package.json` 的 `build` 脚本用 CLI 覆盖
+  // （`--module commonjs --moduleResolution node10 --outDir dist/cjs --declaration false`）——
+  // 一份源码两遍 tsc，不引 bundler。
+  //
+  // **为什么这里写死 `module: ESNext` / `moduleResolution: Bundler`，而不是继承 tsconfig.json 的 NodeNext**：
+  // 产出格式必须由**构建配置**决定，不能由「根 package.json 有没有 type 字段」推断 ——
+  // 本仓库的根 package.json **有意不加 `"type": "module"`**，因为那会连带改掉全仓库对 `.js` 的解析语义
+  // （`tests/.ts-out/*.js` 是 tsc 出的 CommonJS，`scripts/*.mjs`、`examples/` 也都在同一棵树里）。
+  // 两棵产物树各自带一个格式作用域文件（`dist/package.json` = type:module、`dist/cjs/package.json`
+  // = type:commonjs），由 `scripts/build-styles.mjs` 在构建收尾时写出，`scripts/check-dist.mjs` 校验。
+  // 后缀仍然由 tsconfig.json 的 NodeNext 在**类型检查**时强制（`npm run typecheck`），两处配合才闭环。
+  //
   // `examples/demo.tsx` 是 dev-only 示范页（方案 §2.5 / Q8）：它自己 createRoot 挂到页面上、自己切 data-theme
   // （那是宿主的活），所以**不进 barrel、不进 files、不进 dist**，库测试也不依赖它。
   // `include: ["src"]`（继承自 tsconfig.json）本来就不会把 `examples/` 编进 dist，这条 exclude 是双保险；
   // `npm run check:dist` 另有一条「dist 里不得出现 demo」的产物级断言。
   "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
   "exclude": ["examples", "node_modules", "dist", "tests"]
 }

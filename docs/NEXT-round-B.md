@@ -97,10 +97,13 @@ for (const t of sub.types) types.add(t);
 
 ## 2. 14 个零断言符号的直接覆盖（**未落地**）
 
-README 原文只承认 `Keep` / `useBlankTap` 两个符号零断言；t2 实测是 **14 个**：
+README 原文只承认 `Keep` / `useBlankTap` 两个符号零断言；t2 在其时点实测是 **14 个**。
+**注意（2026-09-20 复核修正）**：t3 修 BUG-1 时已给其中两个补上断言
+（`Overlay` → `ui.overlay-full`；`DropMenu` → 3 条 `ui.dropmenu.*`，含新增的
+`ui.dropmenu.layout-effect-deps`），所以**当前实际零断言的是 12 个**：
 
 ```
-Keep · Overlay · TipHost · useBlankTap · useLandscape · TabBar · DropMenu
+Keep · TipHost · useBlankTap · useLandscape · TabBar
 showTip · hideTip · subscribeTip · setKitPcMode · kitPcOn · useKitPcMode · useHoverTipsEnabled
 ```
 

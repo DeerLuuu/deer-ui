@@ -11,7 +11,7 @@
 // It renders a fragment and never mounts/unmounts itself: callers keep wrapping
 // it in <Keep on={…} el={<Dialog …/>} /> so the exit animation can run.
 import React, { useEffect } from "react";
-import { Icon } from "./primitives";
+import { Icon } from "./primitives.js";
 
 export interface DialogProps {
   /** header text; also used as aria-label when it is a plain string */

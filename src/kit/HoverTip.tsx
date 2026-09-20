@@ -8,12 +8,12 @@
 // pushed in from the app layer: main.tsx calls setHoverTipsEnabled() whenever
 // pcmode.ts re-resolves the mode.
 import React, { useEffect, useState } from "react";
-import { useKitPcMode } from "./pcmode";
+import { useKitPcMode } from "./pcmode.js";
 
 // PC 开关见 ./pcmode（kit 自有的最小状态，由应用层写入）
-export { setKitPcMode, kitPcOn, useKitPcMode } from "./pcmode";
+export { setKitPcMode, kitPcOn, useKitPcMode } from "./pcmode.js";
 /** 兼容旧名（内部只关心「现在是 PC 吗」） */
-export { setKitPcMode as setHoverTipsEnabled, kitPcOn as hoverTipsEnabled, useKitPcMode as useHoverTipsEnabled } from "./pcmode";
+export { setKitPcMode as setHoverTipsEnabled, kitPcOn as hoverTipsEnabled, useKitPcMode as useHoverTipsEnabled } from "./pcmode.js";
 
 // ------------------------------------------------------------- positioning
 export interface TipPoint { x: number; y: number }

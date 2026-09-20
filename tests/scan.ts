@@ -169,11 +169,25 @@ export function classifySpecifier(mod: string, target: string | null, insideSrc:
   return insideSrc ? "ok" : "escape";
 }
 
-/** 相对说明符 → 真实文件（bundler 风格：允许省后缀，允许目录下的 index）。 */
+/** 相对说明符 → 真实文件。三种写法都要认：
+ *  ① **省后缀**（bundler 风格：允许省后缀，允许目录下的 index）；
+ *  ② **产物后缀** `./x.js` / `.jsx` / `.mjs` / `.cjs`：双格式产物要求源码里就写成 `./x.js`
+ *     （Node 的解析器不补后缀、不认目录），而磁盘上的真实文件是 `x.ts` / `x.tsx`。TS 自己会做这层替换
+ *     （NodeNext 的 `.js` → `.ts`），这里把同一条规则补上，**只做后缀映射**；
+ *  ③ 真的存在同名 `.js` 文件（映射不到时仍认它）。
+ *  ⚠️ **不放松任何语义**：能不能解析到、解析到的东西在不在 `src/` 里，仍由 `classifySpecifier` 判定 ——
+ *  越界仍是 `"escape"`、非白名单裸包名仍是 `"not-allowed"`、解析不到仍是 `"unresolved"`。 */
 export function resolveSpec(fromFile: string, spec: string): string | null {
   const base = path.resolve(path.dirname(fromFile), spec);
-  const candidates = [base, base + ".ts", base + ".tsx", base + ".d.ts",
-    path.join(base, "index.ts"), path.join(base, "index.tsx")];
+  const stem = base.replace(/\.(?:js|jsx|mjs|cjs)$/, "");
+  const candidates = stem === base
+    // 省后缀那条路：候选顺序与改动前逐字相同（不引入任何行为变化）
+    ? [base, base + ".ts", base + ".tsx", base + ".d.ts",
+      path.join(base, "index.ts"), path.join(base, "index.tsx")]
+    // 带产物后缀：先按 TS 的替换规则找源码（`.d.ts` 排在 `.ts`/`.tsx` 之后，但都在真实 `.js` 之前 ——
+    // 判据要读的是**源码**，不是编译产物），最后才认真实的 `.js`
+    : [stem + ".ts", stem + ".tsx", stem + ".d.ts",
+      path.join(stem, "index.ts"), path.join(stem, "index.tsx"), base];
   for (const c of candidates) if (fs.existsSync(c) && fs.statSync(c).isFile()) return c;
   return null;
 }
