@@ -50,4 +50,18 @@ export function testA0Purity(): void {
   cases.forEach(([mod, target, inside, want], i) => {
     eq("kit.purity.selfcheck." + i + "." + mod.replace(/[^A-Za-z0-9]/g, "_"), classifySpecifier(mod, target, inside), want);
   });
+
+  // 自检：**说明符收集**本身要看得见类型级 re-export —— 否则同一类盲区还有第二处：
+  // `export type * from "…"` / `export type { A } from "…"` 会把**库外**模块拉进依赖图，
+  // 而「只许依赖白名单 + 不越出 src/」这条判据连它们的说明符都收不到（`offenders` 恒空）。
+  const specCases: [string, string[]][] = [
+    ['export type * from "./x.js";', ["./x.js"]],
+    ['export type { A, B as C } from "./x.js";', ["./x.js"]],
+    ['export * from "./x.js";', ["./x.js"]],
+    ['export * as ns from "./x.js";', ["./x.js"]],
+    ['// export type * from "./x.js";', []],
+  ];
+  specCases.forEach(([code, want], i) => {
+    eq("kit.purity.selfcheck.specifiers." + i, importSpecifiers(code).map((s) => s.mod), want);
+  });
 }

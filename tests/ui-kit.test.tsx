@@ -17,11 +17,16 @@
 // class names, aria attributes and the head → top → body → extra → foot order.
 import { renderToStaticMarkup } from "react-dom/server";
 import { eq, ok } from "./common";
+// 仓库根一律从 tests/env.ts 取（`srcDir()` 支持 DEERUI_LIB_ROOT 覆盖），**不再**写死
+// `__dirname/../../../src` —— 否则「在没有副作用的副本里拿同一份判据做负例」这条路对本文件不通
+// （F5：判据可移植性修复，不是判据弱化；原断言名与语义一字未改）。
+import { srcDir } from "./env";
 import { classifySpecifier, importSpecifiers, insideDir, resolveSpec } from "./scan";
 import { Dialog } from "../src/kit/Dialog";
 import { Row, RowActions, ChipGroup, Segmented, Switch, NumberField, ColorField } from "../src/kit/Form";
 import { Icon, Btn } from "../src/kit/primitives";
-import { HoverTip, hoverTipPos, setHoverTipsEnabled } from "../src/kit/HoverTip";
+import { HoverTip, hoverTipPos, setHoverTipsEnabled, useHoverTipsEnabled } from "../src/kit/HoverTip";
+import { TabBar } from "../src/tabs";
 
 const fs = require("fs");
 const path = require("path");
@@ -154,6 +159,35 @@ export function testUiKit(): void {
   ok("ui.btn", btn.indexOf('class="btn active danger"') >= 0 && btn.indexOf('aria-label="保存"') >= 0 && btn.indexOf('data-guide="btn-save"') >= 0);
   ok("ui.icon", html(<Icon id="i-x" size={16} />).indexOf('width="16"') >= 0);
 
+  // --------------------------------------------------------------- TabBar
+  // 契约：`.tabbar`（className 追加到根）包 `.tabbar-tabs`，每个 item 一个 `.tabbar-tab`（选中项加 `on`），
+  // `badge` 出 `.tabbar-badge`、`right` 出 `.tabbar-right`、`guide` 进 `data-guide`。
+  const tb = html(
+    <TabBar
+      items={[{ id: "a", label: "甲" }, { id: "b", label: "乙", badge: "3", guide: "tab-b" }]}
+      value={"a" as "a" | "b"}
+      onChange={() => { /* noop */ }}
+      right={<span className="r-probe">R</span>}
+      className="extra"
+    />
+  );
+  ok("ui.tabbar.structure", tb.indexOf('class="tabbar extra"') >= 0
+    && tb.indexOf('class="tabbar-tabs"') >= 0
+    && tb.indexOf('class="tabbar extra"') < tb.indexOf('class="tabbar-tabs"')
+    && (tb.match(/class="tabbar-tab"/g) || []).length === 1
+    && (tb.match(/class="tabbar-tab on"/g) || []).length === 1,
+    "TabBar markup = " + JSON.stringify(tb));
+  ok("ui.tabbar.selected", /class="tabbar-tab on"[^>]*>甲</.test(tb)
+    && /class="tabbar-tab"[^>]*>乙/.test(tb),
+    "选中态必须落在 value 指定的那个 item 上（甲 on / 乙 不 on）");
+  ok("ui.tabbar.badge", tb.indexOf('class="tabbar-badge"') >= 0 && tb.indexOf(">3<") >= 0,
+    "badge 必须渲染成 .tabbar-badge 并带上文本");
+  ok("ui.tabbar.guide", tb.indexOf('data-guide="tab-b"') >= 0,
+    "item.guide 必须进 data-guide（无 guide 的 item 不渲染该属性）");
+  ok("ui.tabbar.right", tb.indexOf('class="tabbar-right"') >= 0 && tb.indexOf("r-probe") >= 0
+    && tb.indexOf('class="tabbar-tabs"') < tb.indexOf('class="tabbar-right"'),
+    "right 必须渲染在 .tabbar-right 里、且在 tabs 之后");
+
   // ------------------------------------------------------------ HoverTip
   // the panel is positioned by a pure helper: to the lower-right of the cursor,
   // flipped when it would leave the viewport, always clamped inside it
@@ -183,23 +217,40 @@ export function testUiKit(): void {
   eq("ui.htip.enabled-flag", hoverTipsEnabled(), true);
   setHoverTipsEnabled(false);
   eq("ui.htip.disabled-flag", hoverTipsEnabled(), false);
+  // hook 形态的公开别名（`useHoverTipsEnabled` = `useKitPcMode`）：读到的值必须跟着 setter 走。
+  // 与上面的 flag 断言成对，但约束的是 **hook**（SSR 走 getServerSnapshot），不是裸函数。
+  {
+    const PcProbe = (): React.ReactElement => {
+      const on = useHoverTipsEnabled();
+      return <span data-pc={String(on)} />;
+    };
+    setHoverTipsEnabled(true);
+    const pcOnHtml = html(<PcProbe />);
+    setHoverTipsEnabled(false);
+    const pcOffHtml = html(<PcProbe />);
+    ok("ui.hovertips.hook-follows-setter",
+      pcOnHtml.indexOf('data-pc="true"') >= 0 && pcOffHtml.indexOf('data-pc="false"') >= 0,
+      "setHoverTipsEnabled(true) → " + pcOnHtml + "；false → " + pcOffHtml);
+    ok("ui.hovertips.hook-restored", hoverTipsEnabled() === false,
+      "测试结尾 hoverTipsEnabled() = " + hoverTipsEnabled());
+  }
   // Btn must be wired to it (the hover tip is the desktop substitute for the
   // long-press tip, so it has to live inside Btn and not at the call sites)
   {
-    const kitDir = path.resolve(__dirname, "../../../src/kit");
+    const kitDir = path.join(srcDir(), "kit");
     const prim = fs.readFileSync(path.join(kitDir, "primitives.tsx"), "utf8");
     ok("ui.htip.btn-wired", prim.indexOf("useHoverTip") >= 0 && prim.indexOf("hover.node") >= 0);
     ok("ui.htip.mouse-not-longpress", prim.indexOf('e.pointerType === "mouse"') >= 0);
   }
   // 手机竖屏的面板整屏铺开（由 App 决定 full，kit 只负责加类名）
   {
-    const prim = fs.readFileSync(path.resolve(__dirname, "../../../src/kit/primitives.tsx"), "utf8");
+    const prim = fs.readFileSync(path.join(srcDir(), "kit", "primitives.tsx"), "utf8");
     ok("ui.overlay-full", /full = false/.test(prim) && prim.includes('full ? " panel-full" : ""'));
   }
   // 下拉列表必须 portal 出去：时间轴控制条是 `overflow-x:auto` 的滚动容器，
   // 绝对定位的列表会被它整块裁掉 —— 播放速度色片「点了没反应」就是这么来的
   {
-    const tabs = fs.readFileSync(path.resolve(__dirname, "../../../src/tabs.tsx"), "utf8");
+    const tabs = fs.readFileSync(path.join(srcDir(), "tabs.tsx"), "utf8");
     ok("ui.dropmenu.portal", tabs.includes("createPortal") && tabs.includes("document.body"));
     ok("ui.dropmenu.fixed-pos", tabs.includes("dropmenu-pop") && tabs.includes("getBoundingClientRect"));
     // BUG-1 回归：`useLayoutEffect` 必须带依赖数组（只钉 `[open]`）。
@@ -224,7 +275,7 @@ export function testUiKit(): void {
   // 判据分两步：① 边界经 `bounds` ref 走（且每次 render 都刷新）；② 算值那次调用不出现裸 props。
   // （完整的事件驱动证明在 tests/ui-hooks.test.tsx 的 `ui.scrubnum.drag-live-bounds`。）
   {
-    const scrub = fs.readFileSync(path.resolve(__dirname, "../../../src/kit/scrub.tsx"), "utf8");
+    const scrub = fs.readFileSync(path.join(srcDir(), "kit", "scrub.tsx"), "utf8");
     const args = callArgs(scrub, "scrubValue");
     const bare = args === null ? ["<没找到调用>"] : bareArgs(args);
     // 只允许 base / 位移 / ref 系的名字；`min` `max` `step` 这种裸 props 名字一旦出现就是捕获旧值。
@@ -239,8 +290,8 @@ export function testUiKit(): void {
   // --------------------------------------------------------- kit purity
   // 白名单是**库的形状**：react / react-dom 家族 + 库内相对路径（相对路径必须解析得到、且不得越出 src/）。
   // 逻辑与 A0-1（tests/a0-purity.test.ts）共用 tests/scan.ts，不存在两套实现漂移的可能。
-  const kitDir = path.resolve(__dirname, "../../../src/kit");
-  const libSrc = path.resolve(__dirname, "../../../src");
+  const kitDir = path.join(srcDir(), "kit");
+  const libSrc = srcDir();
   const kitFiles: string[] = fs.readdirSync(kitDir).filter((f: string) => /\.(ts|tsx)$/.test(f));
   ok("ui.kit.sources", kitFiles.length >= 5, "files=" + kitFiles.length);
   const offenders: string[] = [];

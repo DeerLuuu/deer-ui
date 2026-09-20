@@ -203,7 +203,10 @@ export function importSpecifiers(text: string): { mod: string; line: number }[] 
   const src = stripComments(text);
   const patterns = [
     /\bimport\s+(?:type\s+)?(?:[^"'`]*?\bfrom\s+)?["']([^"']+)["']/g,
-    /\bexport\s+(?:\*|\{[^}]*\})\s*(?:as\s+[A-Za-z_$][\w$]*\s+)?from\s*["']([^"']+)["']/g,
+    // `(?:type\s+)?` 不可省：`export type * from "…"` / `export type { A } from "…"` 是类型级再导出，
+    // 它们同样把**库外**的模块拉进依赖图（`resolveSpec` 的越界判定必须看得见它们）。少了这一组，
+    // 「`src/**` 只许依赖白名单 + 不越出 src/」这条判据对类型级再导出**完全不可见**。
+    /\bexport\s+(?:type\s+)?(?:\*|\{[^}]*\})\s*(?:as\s+[A-Za-z_$][\w$]*\s+)?from\s*["']([^"']+)["']/g,
     /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
     /\brequire\s*\(\s*["']([^"']+)["']\s*\)/g,
   ];
@@ -242,7 +245,11 @@ export function barrelSurface(entryAbs: string, seen: Set<string> = new Set(), d
   const src = stripComments(fs.readFileSync(entryAbs, "utf8"));
 
   const reNamed = /export\s+(type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
-  const reStar = /export\s+\*\s*(?:as\s+([A-Za-z_$][\w$]*)\s+)?from\s*["']([^"']+)["']/g;
+  // ⚠️ `(type\s+)?` 是**必须**的：`export type * from "./x"` 是合法的类型级再导出，它只并入**类型**集合。
+  // 少了这一组，正则会在 `export type *` 上失配 → 公开类型面**完全不可见**（范围 C 的 W1 缺口）：
+  // 给 barrel 加一行 `export type * from "./secret"`，快照与导出面判据都会全绿，而消费者能
+  // `import type { SecretApi } from "deer-ui/kit"`。裸 `export *` / `export * as ns` 的行为不变。
+  const reStar = /export\s+(type\s+)?\*\s*(?:as\s+([A-Za-z_$][\w$]*)\s+)?from\s*["']([^"']+)["']/g;
 
   let m: RegExpExecArray | null;
   while ((m = reNamed.exec(src))) {
@@ -260,15 +267,19 @@ export function barrelSurface(entryAbs: string, seen: Set<string> = new Set(), d
     }
   }
   while ((m = reStar.exec(src))) {
-    const nsName = m[1];
+    const isType = Boolean(m[1]);
+    const nsName = m[2];
     if (nsName) {
-      values.add(nsName);
+      // `export * as ns` 造出的是**值**命名空间；`export type * as ns` 造出的是**类型**命名空间
+      // （`import { ns } from …` 用不了）。两侧都记成值/类型会很危险：记成值会假红，记成类型才与 TS 一致。
+      (isType ? types : values).add(nsName);
       continue;
     }
-    const target = resolveSpec(entryAbs, m[2]);
+    const target = resolveSpec(entryAbs, m[3]);
     if (!target) continue;
     const sub = barrelSurface(target, seen, depth + 1);
-    for (const v of sub.values) values.add(v);
+    // `export *` 同时再导出值与类型；`export type *` **只**再导出类型（不引入任何值）。
+    if (!isType) for (const v of sub.values) values.add(v);
     for (const t of sub.types) types.add(t);
   }
 
