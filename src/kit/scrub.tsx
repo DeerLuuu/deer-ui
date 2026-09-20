@@ -43,46 +43,84 @@ export function ScrubNum({
   const wheelAcc = useRef(0);
   /** newest value applied inside one frame (props lag until re-render) */
   const wheelVal = useRef<number | null>(null);
+  /**
+   * 拖动/滚轮期间**必须读最新 props** 的那几项。
+   *
+   * 为什么要有这个 ref：拖动的两个处理器在 `arm()` 里定义、再挂到 `window` 上
+   * （`window.addEventListener("pointermove", mv)`）。事件处理器看到的是**注册那一帧**的闭包，
+   * 所以直接读 `min/max/step/onChange` 会拿到陈旧值 —— 拖动已经 arm 之后父组件改了边界
+   * （改单位、切预设）就会被旧闭包吞掉，算出越界值或步长不符（BUG-2）。每次 render 刷新这个
+   * ref，`mv` / 滚轮处理器就总能按当帧边界算。
+   */
+  const bounds = useRef({ min, max, step, onChange });
+  bounds.current = { min, max, step, onChange };
+  /**
+   * 拖动期间挂在 `window` 上的那两个处理器。
+   *
+   * `end()` 是「卸载」与「pointerup」两条路都要摘的对象，所以它必须**按引用**被 `arm` 记住，
+   * 不能靠闭包里的函数标识猜（`down` 是 React 事件处理器，定时器闭包与卸载 effect 各自看到的
+   * 函数可能不是同一个实例 —— 靠闭包就会摘不掉、监听留在 window 上，BUG-3 正是这么来的）。
+   * 只在 `arm` 里写，不在 render 期写（render 必须无副作用）。
+   */
+  const live = useRef<{ mv: (ev: PointerEvent) => void; end: () => void } | null>(null);
   /** raw text while focused (null = show the committed value) */
   const [text, setText] = useState<string | null>(null);
   /** screen position of the operator pad while focused */
   const [pad, setPad] = useState<{ left: number; top: number } | null>(null);
-  const clampN = (n: number) => { if (min != null) n = Math.max(min, n); if (max != null) n = Math.min(max, n); return n; };
+  const clampN = (n: number) => {
+    const b = bounds.current;
+    if (b.min != null) n = Math.max(b.min, n);
+    if (b.max != null) n = Math.min(b.max, n);
+    return n;
+  };
   const numeric = () => {
     if (text !== null) { const e = evalExpr(text); if (e !== null) return clampN(e); }
     const n = parseFloat(String(value));
-    return Number.isFinite(n) ? n : (min ?? 0);
+    return Number.isFinite(n) ? n : (bounds.current.min ?? 0);
   };
   /** commit an evaluated result (integers unless a fractional step is declared) */
   const commit = (n: number) => {
-    const q = step != null && !Number.isInteger(step) ? n : Math.round(n);
-    onChange(String(clampN(q)));
+    const st = bounds.current.step;
+    const q = st != null && !Number.isInteger(st) ? n : Math.round(n);
+    bounds.current.onChange(String(clampN(q)));
   };
-  const end = () => {
+  /** 摘掉拖动期间挂在 window 上的监听 + 清掉还没到点的 armT（pointerup 与卸载共用这条路） */
+  const detachLive = (): void => {
     if (armT.current !== null) { window.clearTimeout(armT.current); armT.current = null; }
     anchor.current = null;
-    window.removeEventListener("pointermove", mv);
-    window.removeEventListener("pointerup", end);
-    window.removeEventListener("pointercancel", end);
+    const l = live.current;
+    if (!l) return;
+    window.removeEventListener("pointermove", l.mv);
+    window.removeEventListener("pointerup", l.end);
+    window.removeEventListener("pointercancel", l.end);
+    live.current = null;
   };
-  const mv = (ev: PointerEvent) => {
-    const a = anchor.current;
-    if (!a) return;
-    const dx = ev.clientX - a.x;
-    const dy = ev.clientY - a.y;
-    const d = Math.abs(dy) > Math.abs(dx) ? -dy : dx; // drag up or right increases
-    if (Math.abs(d) < SCRUB_DEAD_PX) return;          // ignore the arming wobble
-    onChange(String(scrubValue(a.n, d, min, max, step)));
+  const arm = () => {
+    const mv = (ev: PointerEvent) => {
+      const a = anchor.current;
+      if (!a) return;
+      const dx = ev.clientX - a.x;
+      const dy = ev.clientY - a.y;
+      const d = Math.abs(dy) > Math.abs(dx) ? -dy : dx; // drag up or right increases
+      if (Math.abs(d) < SCRUB_DEAD_PX) return;          // ignore the arming wobble
+      const b = bounds.current;                          // 当帧的 min/max/step，不是 arm 那一帧的
+      bounds.current.onChange(String(scrubValue(a.n, d, b.min, b.max, b.step)));
+    };
+    const end = () => detachLive();
+    live.current = { mv, end };
+    window.addEventListener("pointermove", mv);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
   };
   const down = (e: React.PointerEvent<HTMLInputElement>) => {
     const el = e.currentTarget;
+    const x = e.clientX;
+    const y = e.clientY;
     armT.current = window.setTimeout(() => {
       armT.current = null;
       try { el.blur(); } catch { /* ignore */ }
-      anchor.current = { x: e.clientX, y: e.clientY, n: numeric() };
-      window.addEventListener("pointermove", mv);
-      window.addEventListener("pointerup", end);
-      window.addEventListener("pointercancel", end);
+      anchor.current = { x, y, n: numeric() };
+      arm();
     }, 380);
   };
   const clearT = () => { if (armT.current !== null) { window.clearTimeout(armT.current); armT.current = null; } };
@@ -133,16 +171,28 @@ export function ScrubNum({
       const { steps, rest } = takeNotches(wheelAcc.current + wheelNotches(e.deltaY, e.deltaMode));
       wheelAcc.current = rest;
       if (!steps) return;
-      const span = min != null && max != null ? max - min : 0;
-      const stepN = step != null ? step : span > 200 ? 5 : 1;
+      const b = bounds.current;  // 边界与 onChange 一律走 live ref（[value, text] 只决定重算基准）
+      const span = b.min != null && b.max != null ? b.max - b.min : 0;
+      const stepN = b.step != null ? b.step : span > 200 ? 5 : 1;
       const cur = wheelVal.current ?? numeric();
       const next = clampN(cur - steps * stepN);
       if (next !== cur) { wheelVal.current = next; commit(next); }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [min, max, step, value, text]);
+  }, [value, text]);
+
+  /**
+   * 卸载清理（BUG-3）。`detachLive()` 只在 pointerup / pointercancel 走，**组件在按住期间被卸载**
+   * （本库自己的 `<Keep>` 就是延迟卸载语义）不会走那条路：三个 window 监听会留在 window 上，
+   * 卸载后 pointermove 还会继续调 onChange 去 setState 一个已经不存在的组件。
+   * 这里挂一个空依赖的 effect，卸载时把 armT / 三个监听 / 拖动状态一次清干净。
+   * （清 `wheelAcc` 是顺手把「手势残值」在实例销毁时归零；手势**内部**的累加语义没动。）
+   */
+  useEffect(() => () => {
+    detachLive();
+    wheelAcc.current = 0;
+  }, []);
 
   /** insert at the caret of the (controlled) field, keeping the caret put */
   const insert = (ins: string) => {

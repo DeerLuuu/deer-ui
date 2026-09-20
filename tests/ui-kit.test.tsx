@@ -28,6 +28,38 @@ const path = require("path");
 
 const html = (el: unknown): string => renderToStaticMarkup(el as never);
 
+/**
+ * 取出 `src` 里 **`String(name(...))` 这次调用**的实参文本。
+ *
+ * 为什么要带 `String(` 前缀、还要自己按括号配对截：
+ *   ① 直接搜 `scrubValue(` 会先命中文件头的 `import { … scrubValue … } from "../internal/scrub";`
+ *      —— 那条 import 里根本没有调用，判据会变成永远看空串；
+ *   ② 外面套着 `String(...)`，而 `.` 不匹配换行、懒惰正则会在第一个 `)` 就收尾。
+ * 找不到或括号不配对返回 null。
+ */
+function callArgs(src: string, name: string): string | null {
+  const at = src.indexOf("String(" + name + "(");
+  if (at < 0) return null;
+  const open = at + "String(".length + name.length;
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i];
+    if (c === "(") depth++;
+    else if (c === ")") { depth--; if (depth === 0) return src.slice(open + 1, i); }
+  }
+  return null;
+}
+
+/** 实参里出现的**裸标识符**（`a.n` / `b.min` 这种带成员访问的不算）。 */
+function bareArgs(args: string): string[] {
+  const out: string[] = [];
+  for (const chunk of args.split(",")) {
+    const id = chunk.trim().match(/^[A-Za-z_$][\w$]*$/);
+    if (id) out.push(id[0]);
+  }
+  return out;
+}
+
 export function testUiKit(): void {
   // ---------------------------------------------------------------- Dialog
   const d = html(
@@ -170,6 +202,38 @@ export function testUiKit(): void {
     const tabs = fs.readFileSync(path.resolve(__dirname, "../../../src/tabs.tsx"), "utf8");
     ok("ui.dropmenu.portal", tabs.includes("createPortal") && tabs.includes("document.body"));
     ok("ui.dropmenu.fixed-pos", tabs.includes("dropmenu-pop") && tabs.includes("getBoundingClientRect"));
+    // BUG-1 回归：`useLayoutEffect` 必须带依赖数组（只钉 `[open]`）。
+    // 少了它每次 render 都「先摘再挂」resize/scroll，且会一路挂到下一个 hook 的 `}, […]);` 上去。
+    // 判据只扫这一个 hook 的正文（在下一个 use* 调用前截断），不会把下面 useEffect 的依赖数组当答案。
+    {
+      const hook = "useLayoutEffect(() => {";
+      const at = tabs.indexOf(hook);
+      const tail = at < 0 ? "" : tabs.slice(at + hook.length);
+      const next = tail.search(/use[A-Z]\w*\(/);
+      const body = next < 0 ? tail : tail.slice(0, next);
+      // 找这个 hook 的依赖数组：块尾形如 `}, [open]);`（正则里花括号不必转义）
+      const deps = /^ {2}\}, \[([^\]]*)\]\);/m.exec(body);
+      ok("ui.dropmenu.layout-effect-deps", at >= 0 && deps !== null && deps[1].trim() === "open",
+        "hook=" + at + " deps=" + (deps ? "[" + deps[1] + "]" : "NONE"));
+    }
+  }
+
+  // ------------------------------------------------------------ ScrubNum
+  // BUG-2 回归：拖动期间必须读**当帧**的 min/max/step —— 拖动处理器是在 arm 时挂到 window 上的，
+  // 直接读 props 就会捕获注册那一帧的值，拖动中父组件改边界（改单位 / 切预设）会被旧闭包吞掉。
+  // 判据分两步：① 边界经 `bounds` ref 走（且每次 render 都刷新）；② 算值那次调用不出现裸 props。
+  // （完整的事件驱动证明在 tests/ui-hooks.test.tsx 的 `ui.scrubnum.drag-live-bounds`。）
+  {
+    const scrub = fs.readFileSync(path.resolve(__dirname, "../../../src/kit/scrub.tsx"), "utf8");
+    const args = callArgs(scrub, "scrubValue");
+    const bare = args === null ? ["<没找到调用>"] : bareArgs(args);
+    // 只允许 base / 位移 / ref 系的名字；`min` `max` `step` 这种裸 props 名字一旦出现就是捕获旧值。
+    // 数一下条数：实参是 5 个，`a.n` / `b.min` / `b.max` / `b.step` 都是成员访问，裸标识符只剩位移 `d`。
+    const staleProps = bare.some((n) => n === "min" || n === "max" || n === "step");
+    ok("ui.scrubnum.bounds-live", !staleProps && bare.length === 1,
+      "scrubValue(" + (args === null ? "<没找到调用>" : args.replace(/\s+/g, " ")) + ") 裸标识符=" + JSON.stringify(bare));
+    ok("ui.scrubnum.bounds-ref", /const bounds = useRef\(\{ min, max, step, onChange \}\)/.test(scrub)
+      && /^\s*bounds\.current = \{ min, max, step, onChange \};/m.test(scrub));
   }
 
   // --------------------------------------------------------- kit purity

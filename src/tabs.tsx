@@ -85,6 +85,9 @@ export function DropMenu<T extends string>({ label, title, value, options, onPic
     setOpen(next);
   };
   // 跟着窗口变化重算（横竖屏切换 / 键盘弹起后按钮会移动）
+  // 依赖数组必须写：[open] —— 少了它每次 render 都会「先摘再挂」一遍这两个监听
+  // （菜单开着时任何一个 setState/滚动都会重挂，属于监听 churn）。挂在 window 上的监听
+  // 只依赖「开/关」这一个状态，所以 [open] 就够，不需要把 measure 也列进去。
   useLayoutEffect(() => {
     if (!open) return;
     const onMove = () => measure();
@@ -94,7 +97,7 @@ export function DropMenu<T extends string>({ label, title, value, options, onPic
       window.removeEventListener("resize", onMove);
       window.removeEventListener("scroll", onMove, true);
     };
-  });
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };

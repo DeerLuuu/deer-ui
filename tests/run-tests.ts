@@ -13,6 +13,7 @@ import { testA0Purity } from "./a0-purity.test";
 import { testA0Barrel } from "./a0-barrel.test";
 import { testA0HostBoundaries } from "./a0-host-boundaries.test";
 import { testUiKit } from "./ui-kit.test";
+import { testUiHooks } from "./ui-hooks.test";
 import { testKitStyles } from "./styles.test";
 import { testAssertionBudget } from "./budget.test";
 
@@ -27,6 +28,8 @@ function main(): void {
   testA0HostBoundaries();
   console.log("--- 控件 DOM 契约（库自带；P0b 从应用侧 tests/ui-kit.test.tsx 搬来，名字逐字保留） ---");
   testUiKit();
+  console.log("--- 控件副作用生命周期（effect 运行器：BUG-3 的卸载清理） ---");
+  testUiHooks();
   console.log("--- 库自带样式（tokens + kit 规则 / 归属不越界 / 产物链路） ---");
   testKitStyles();
   console.log("--- 断言预算闸门（库自己的下限 134 = 控件契约 62 + 判据与基建 72） ---");
