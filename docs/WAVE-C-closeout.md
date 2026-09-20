@@ -1,7 +1,8 @@
 # 范围 C 收尾记录（t7 产出）
 
 > 本文件是**范围 C 的终局收尾记录**，不是需求文档：需求与验收口径在
-> [`docs/REQUIREMENTS-freeze-C.md`](REQUIREMENTS-freeze-C.md)（冻结件，本轮不改）。
+> [`docs/REQUIREMENTS-freeze-C.md`](REQUIREMENTS-freeze-C.md)（冻结件：t8 只在 §5 表后**加了一段注记**，
+> 表与其余正文一字未改，见 `git show --stat 0489690`）。
 > 范围 A/B 的口径在 [`docs/REQUIREMENTS-freeze.md`](REQUIREMENTS-freeze.md)，
 > 范围 B 的未完成项清单在 [`docs/NEXT-round-B.md`](NEXT-round-B.md)。
 >
@@ -71,7 +72,7 @@
 | `README.md` →「三条硬要求」第 2 条 | 双格式的**运行期可用**与**类型不可用（F1）**、以及 F2（自检式恒 false）的新口径 |
 | `docs/NEXT-round-B.md` | 范围 B 的待办与「计划缺陷复盘」（历史件，§1/§2 的事项已由范围 C 关闭） |
 | `docs/REQUIREMENTS-freeze.md` | 范围 A/B 的需求与不变量（**其数字是范围 A/B 生成时的基线**，现值见本文件与 README） |
-| `docs/REQUIREMENTS-freeze-C.md` | 范围 C 的冻结口径与 143 条基线名单（**冻结件，本轮一字未改**） |
+| `docs/REQUIREMENTS-freeze-C.md` | 范围 C 的冻结口径与 143 条基线名单（**冻结件的表与正文未改；t8 仅在 §5 表后加了一段「实际落点以任务 `inScope` 为准」的注记**，19 insertions / 0 deletions） |
 | 本文件 §5 | 下一轮入口：F1 / F3 / V1 的具体行号、改法与耦合关系 |
 
 **仍然存在、且本轮明确保留的缺口**（不许删）：令牌超集、双包单例分裂、无障碍只做一半（无焦点陷阱 / `aria-live`）、
