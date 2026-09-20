@@ -1,0 +1,8 @@
+# 依赖与产物不入库（方案 §4.1/§4.3：dist 由 tsc 生成，tarball 由 npm pack 生成）
+node_modules/
+dist/
+tests/.ts-out/
+*.tgz
+
+# 一次性日志
+*.log

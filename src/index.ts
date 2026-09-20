@@ -1,0 +1,22 @@
+/**
+ * deer-ui 的包入口（`exports["."]`）。
+ *
+ * 规则（方案 §3.2-A / §3.1）：
+ * ① 本文件**只做 re-export**，不写任何实现（A0-2 的 `kit.barrel.reexport-only` 会盯着这条）；
+ * ② **子入口之间不得互相 import**（`./kit` / `./tabs` / `./tooltip` 各自独立，宿主按模块裁剪时不会连带拉回整棵子树）；
+ *    只有**根入口** re-export 子入口，这是它的职责；
+ * ③ 公开面 = 本文件解析出来的符号集合 = `tests/snapshots/barrel-exports.json` 的快照，
+ *    改导出面必须显式跑 `npm run snapshot:barrel` 并说明改了什么。
+ *
+ * P0b 的变化：`src/kit/index.ts` / `src/tabs.tsx` / `src/tooltip.ts` 会被应用侧的逐字节副本覆盖，
+ * 那时这三行 re-export 就把 25 个值 + 6 个类型 + TabBar/DropMenu 抬上公开面（本文件**不需要改**）。
+ */
+
+/** 控件族：Dialog / Form / primitives / scrub / HoverTip / pcmode 的 barrel。 */
+export * from "./kit";
+
+/** 标签页与下拉菜单（`tabs.tsx`；`kit/index.ts` 里没有它们，所以必须在根入口补这一行）。 */
+export * from "./tabs";
+
+/** 长按 / 悬停提示的模块级单例（**库独占**：宿主那份 `src/ui/tooltip.ts` 必须改成再导出或删掉，见方案 R10）。 */
+export * from "./tooltip";

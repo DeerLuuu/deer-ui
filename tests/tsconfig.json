@@ -1,0 +1,23 @@
+{
+  // 库测试的编译编排（方案 §3.3）。三处**有意偏离**应用仓库那份，理由写在 README：
+  //  ① include 用 glob（应用侧那份 60 条显式清单是历史包袱，每加一个测试要改两处）；
+  //  ② rootDir = 库根（本文件上一级），outDir = tests/.ts-out → 产物在 tests/.ts-out/tests/*.js，
+  //     运行命令因此是 `node tests/.ts-out/tests/run-tests.js`；
+  //  ③ 只在这里吃「从应用侧搬来的既有测试文件」，所以 strict 跟应用侧一致（false）；
+  //     库自己的 src 是 strict: true（见 tsconfig.json）。
+  // jsx 必须写 react-jsx：宿主 esbuild 按「源文件往上最近的 tsconfig.json」决定 JSX 变换（AGENTS.md §6.8）。
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2019",
+    "lib": ["es2020", "dom"],
+    "moduleResolution": "node",
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "rootDir": "..",
+    "outDir": ".ts-out",
+    "noEmitOnError": true
+  },
+  "include": ["../tests/**/*.ts", "../tests/**/*.tsx"]
+}

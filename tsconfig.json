@@ -1,0 +1,33 @@
+{
+  // deer-ui 源码的编译配置。三种用法共用这一个文件：
+  //   tsc -p tsconfig.json --noEmit   → 类型检查（npm run typecheck）
+  //   tsc -p tsconfig.build.json      → 产出 dist（npm run build，见那个文件）
+  //
+  // 三条「不要改回去」（方案 §3.1/§4.1 + AGENTS.md §6.8）：
+  // ① jsx 必须是 react-jsx：宿主 esbuild 按「源文件往上最近的 tsconfig.json」决定 JSX 变换，
+  //    任何一份少了这个字段的 tsconfig 都会让产物退回「引用全局 React」的白屏包。
+  // ② moduleResolution: Bundler + 不带后缀的相对 import 是**有意的**（方案 Q4 选 (b) bundler-only）。
+  //    README 已声明：node 直接 import dist 会失败，消费者只允许是打包器 / 浏览器。
+  // ③ strict: true（本库新建，不背历史包袱；应用侧仍是 false）。
+  // ④ 不引 bundler：一条 tsc 同时出 ESM + .d.ts，不引 vite/rollup/tsup（方案 §9 第 11 条）。
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": false,
+    "isolatedModules": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "noEmitOnError": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src"]
+}

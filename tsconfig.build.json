@@ -1,0 +1,7 @@
+{
+  // 出 dist 用的配置：与 tsconfig.json 完全一致，只多一条排除。
+  // src/demo.tsx 是**测试夹具**（方案 §2.5 / Q8）：库测试渲染它，但它不进 barrel、不进 files。
+  // 排除它只是「不产出 dist/demo.js」；它仍然被 `npm run typecheck`（tsconfig.json）检查，不会静默漏检。
+  "extends": "./tsconfig.json",
+  "exclude": ["src/demo.tsx", "node_modules", "dist", "tests"]
+}

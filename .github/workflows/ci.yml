@@ -1,0 +1,30 @@
+# deer-ui CI（方案 §4.3）：typecheck / build / dist 自检 / 库测试 / 打包干跑。
+#
+# 仓库当前**没有 lockfile**（离线环境生成不出来），所以用 `npm install` 而不是 `npm ci`；
+# 补锁是独立的一轮，那时把这一行换成 `npm ci` 即可。
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: 安装依赖（无 lockfile → install）
+        run: npm install --no-audit --no-fund
+      - name: 类型检查（src，strict）
+        run: npm run typecheck
+      - name: 构建 dist（ESM + .d.ts）
+        run: npm run build
+      - name: dist 自检（exports 目标 / 没打进 React / 无外链）
+        run: npm run check:dist
+      - name: 库测试（断言 N ≥ 112 由 tests/budget.test.ts 在 P0b 后自动生效）
+        run: npm test
+      - name: 打包干跑
+        run: npm pack --dry-run
