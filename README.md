@@ -112,6 +112,12 @@ npm run pack:vendor    # 再落一份应用侧约定的 deerui-0.1.0.tgz（见�
 - **A0-3 全绿**（真实文件里没有 PC / 主题 / 安全区自判；`window.innerWidth` 与 `(orientation: landscape)` 都被正确放过）。
 - `lib.budget.assertions>=112` 在复制完成后**自动生效**（P0b 前是 `p0-pending` 待机）。
 
+**复制时的行尾陷阱（实测）**：两个仓库都是 `core.autocrlf=true` 且都**没有** `.gitattributes`，
+所以 PixelCraft 的**工作区**文件是 **CRLF**、而本仓库新建的文件是 LF。从应用侧拷文件进来**不必手工转 LF**
+（`git add` 会按 `text=auto` 把 CRLF 归一成 LF 入库，与应用侧 blob 一致），
+但**别拿两个工作区的字节直接比**（CRLF vs LF 会假红）——要验「逐字节等于应用侧那份」就比
+`git hash-object <file>`（这条走同一套归一规则）。
+
 ### 导出面快照怎么用
 
 - 改动**导出面**必须显式更新：`npm run snapshot:barrel`，然后在提交信息里写清加了/删了/改了什么符号。
