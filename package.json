@@ -14,31 +14,53 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/cjs/index.js"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.cts",
+        "default": "./dist/cjs/index.cjs"
+      }
     },
     "./kit": {
-      "types": "./dist/kit/index.d.ts",
-      "import": "./dist/kit/index.js",
-      "require": "./dist/cjs/kit/index.js"
+      "import": {
+        "types": "./dist/kit/index.d.ts",
+        "default": "./dist/kit/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/kit/index.d.cts",
+        "default": "./dist/cjs/kit/index.cjs"
+      }
     },
     "./tabs": {
-      "types": "./dist/tabs.d.ts",
-      "import": "./dist/tabs.js",
-      "require": "./dist/cjs/tabs.js"
+      "import": {
+        "types": "./dist/tabs.d.ts",
+        "default": "./dist/tabs.js"
+      },
+      "require": {
+        "types": "./dist/cjs/tabs.d.cts",
+        "default": "./dist/cjs/tabs.cjs"
+      }
     },
     "./tooltip": {
-      "types": "./dist/tooltip.d.ts",
-      "import": "./dist/tooltip.js",
-      "require": "./dist/cjs/tooltip.js"
+      "import": {
+        "types": "./dist/tooltip.d.ts",
+        "default": "./dist/tooltip.js"
+      },
+      "require": {
+        "types": "./dist/cjs/tooltip.d.cts",
+        "default": "./dist/cjs/tooltip.cjs"
+      }
     },
     "./styles.css": "./dist/styles.css",
     "./package.json": "./package.json"
   },
+  "types": "./dist/cjs/index.d.cts",
+  "main": "./dist/cjs/index.cjs",
   "scripts": {
     "typecheck": "node scripts/tsc.mjs -p tsconfig.json --noEmit && node scripts/tsc.mjs -p tsconfig.examples.json --module esnext --moduleResolution bundler",
-    "build": "node scripts/tsc.mjs -p tsconfig.build.json && node scripts/tsc.mjs -p tsconfig.build.json --module commonjs --moduleResolution node10 --outDir dist/cjs --declaration false && node scripts/build-styles.mjs",
+    "build": "node scripts/tsc.mjs -p tsconfig.build.json && node scripts/tsc.mjs -p tsconfig.cjs.json && node scripts/build-styles.mjs",
     "test:build": "node scripts/tsc.mjs -p tests/tsconfig.json",
     "test": "node scripts/tsc.mjs -p tests/tsconfig.json && node tests/.ts-out/tests/run-tests.js",
     "snapshot:barrel": "node scripts/tsc.mjs -p tests/tsconfig.json && node tests/.ts-out/tests/run-tests.js --update-barrel",

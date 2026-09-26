@@ -5,9 +5,9 @@
 
 - **公开仓库**：<https://github.com/DeerLuuu/deer-ui>（public，MIT）
 - **零运行时依赖**：`react` / `react-dom` 只是 peer，**不带** React
-- **无构建框架**：`tsc` 出逐文件产物（ESM + `.d.ts`，以及第二次 `tsc` 出的 CJS），不引 bundler；
-  `tsc` 不拷 CSS，所以 `build` 是「两遍 `tsc` → 拼样式」
-- **未发 npm**：`private: true`，v0 只以 tarball / git 依赖交付（原因见「发布面」）
+- **无构建框架**：`tsc` 出逐文件产物（ESM + `.d.ts`，以及第二次 `tsc` 出的 CJS + `.d.cts`），不引 bundler；
+  `tsc` 不拷 CSS，所以 `build` 是「两遍 `tsc` → 拼样式 + CJS 树扩展名归一」
+- **未发 npm**：`private: true`，v0 只以 **tarball** 交付（**git 依赖在 npm 11 上装不成**，实测见「安装」；原因见「发布面」）
 - **源码真相只在这个仓库**：宿主不得在自己的树里改副本或 `node_modules/deer-ui` —— 改控件来这里改
 
 > 它的血缘是某个像素工具的 `src/ui/`，但**这个库不依赖、也不需要你了解那个应用**：
@@ -19,12 +19,12 @@
 ## 安装
 
 ```sh
-# ① git 依赖（公开仓库）
-npm i github:DeerLuuu/deer-ui
-
-# ② 本地 tarball（v0 的主要交付形式；不需要联网）
+# ① 本地 tarball（v0 **唯一实测可用**的交付形式；不需要联网）
 npm pack --pack-destination .        # → deer-ui-0.1.0.tgz（prepack 会先 build + check:dist）
 npm i ./deer-ui-0.1.0.tgz
+
+# ② git 依赖（公开仓库）—— ⚠️ 在 npm 11 上装不成，见下面的实测块
+npm i github:DeerLuuu/deer-ui
 
 # ③ 本仓库内开发
 git clone https://github.com/DeerLuuu/deer-ui.git deer-ui && cd deer-ui && npm ci
@@ -35,9 +35,28 @@ git clone https://github.com/DeerLuuu/deer-ui.git deer-ui && cd deer-ui && npm c
 
 | 路 | 谁负责构建 |
 |---|---|
-| ① git 依赖 | npm 克隆后先装**这个 git 包自己的 devDependencies**、再跑 `prepare`（= `npm run build`），**然后**才把它装进 `node_modules/deer-ui`。`package.json` 里的 `"prepare": "npm run build"` 就是为这条存在的 |
-| ② tarball | `npm pack` / `npm publish` 前的 `prepack`（= `build` + `check:dist`） |
+| ① tarball | `npm pack` / `npm publish` 前的 `prepack`（= `build` + `check:dist`） |
+| ② git 依赖 | npm 克隆后先装**这个 git 包自己的 devDependencies**、再跑 `prepare`（= `npm run build`），**然后**才把它装进 `node_modules/deer-ui`。`package.json` 里的 `"prepare": "npm run build"` 就是为这条存在的 —— **但 npm 11 会在这一步挡住它**，见下 |
 | ③ 本仓库内开发 | `npm ci` / `npm install` 也会跑一次 `prepare`，所以装完 `dist/` 就已经有了 |
+
+> ⚠️ **git 依赖在 npm 11 上装不成（实测，不是推测）**：`npm i github:DeerLuuu/deer-ui` 会卡在
+> git dep preparation 并失败：
+>
+> ```
+> npm error code EALLOWSCRIPTS
+> npm error --allow-scripts is not allowed in project-scoped installs.
+> npm error git dep preparation failed        ← 挡的正是 "prepare": "npm run build"
+> ```
+>
+> 试过的 6 种绕法**全部无效**：`--ignore-scripts`（同一条报错）、消费侧 `.npmrc` 写
+> `allow-scripts=deer-ui`、消费方 `package.json` 写 `allowScripts`、`npm_config_allow_scripts`
+> 环境变量、清空全局 npmrc 干扰后重试、以及直装 codeload 的 `tar.gz` 分支快照
+> —— **最后这条装得上，但 `node_modules/deer-ui/dist/` 是空的**（产物不入库，而 `prepare`
+> 被 npm 挡掉没跑），等于装了一个不可用的包。
+>
+> **npm 10 及以前没有这条限制**，所以这是 npm 侧脚本策略收紧 × 本仓库「产物不入库 + `prepare` 现建」
+> 的组合冲突，**不是本项目某次改动引入的**。彻底解法是发到 npm（见「发布面」）。
+> **在那之前请走第 ① 路（tarball）。**
 
 > **`prepare` 会在本地 `npm install` / `npm ci` 时也跑一遍 build**。这是「产物不入库」的库仓库的正常形态，
 > 不是缺陷；重复跑是幂等的（`tsc` 与 `build-styles.mjs` 只覆盖 `dist/`）。
@@ -52,23 +71,26 @@ git clone https://github.com/DeerLuuu/deer-ui.git deer-ui && cd deer-ui && npm c
    两份 React = `Invalid hook call` + `useSyncExternalStore` 订阅表分裂。
    宿主装 `file:` **目录**（而非 tarball）时 npm 可能装成指向源目录的 symlink，容易连带出第二份 `react`；装成**真目录**没有这个问题。
 2. **同时提供 ESM 与 CJS 两份产物**（双格式）：`exports` 的每个 JS 子入口都给出
-   `{ types, import, require }` 三个条件（`types` 必须排第一）。相对 import **带 `.js` 后缀**，
-   `dist/` 是 ESM 树、`dist/cjs/` 是 CJS 树，两棵树各带一份作用域 `package.json`
-   （`{"type":"module"}` / `{"type":"commonjs"}`）。所以**原生 `node` 也能直接用**：
+   `types` / `import` / `require` 三个条件，**`types` 排在 `import`、`require` 之前**，且它的值是**两级对象**
+   `{"import": …, "require": …}` —— 两条路的类型都指向**按格式**的声明（ESM 树 `.d.ts` / CJS 树 `.d.cts`）。
+   相对 import **带后缀**（ESM 树 `.js`、CJS 树 `.cjs`），`dist/` 是 ESM 树、`dist/cjs/` 是 CJS 树
+   （`.cjs` + `.d.cts`），两棵树各带一份作用域 `package.json`（`{"type":"module"}` / `{"type":"commonjs"}`）。
+   所以**原生 `node` 也能直接用**：
 
    ```sh
    node -e "console.log(Object.keys(require('deer-ui')).length)"          # → 30
    node --input-type=module -e "import('deer-ui').then(m=>console.log(Object.keys(m).length))"   # → 30
    ```
 
-   ⚠️ **运行期两条路都通，但 TypeScript 消费者目前只支持 ESM / bundler 解析**：`exports` 的 `types`
-   条件**不区分模块格式**，四个入口命中的都是 ESM 树的 `./dist/*.d.ts`，而它被 `dist/package.json` 的
-   `"type": "module"` 判成 **ESM 声明**——`dist/cjs/` 里既没有 `.d.ts` 也没有 `.d.cts`。实测
-   （t2 单变量实验 + t7 独立复现，见 `docs/WAVE-C-closeout.md` §F1）：node16 + **CJS** 工程
-   `import { Dialog } from "deer-ui/kit"` → **TS1479**；`import kit = require("deer-ui/kit")` → **TS1471**；
-   **node10** 解析 → **TS2307**（根 `package.json` 没有顶层 `types` 兜底）；node16 的 **ESM** 工程与
-   **bundler** 工程 → exit 0。修法是**加法**（按格式分流 `types` + 补 `.d.cts`，不需要回滚双格式），
-   但它被 `check-dist` 的「`types` 必须排第一」判据挡住，属下一轮，见「已知缺口」。
+   **TypeScript 消费者（波次 D 起四条路都实测通过）**：四个入口 × `node16+CJS`（`import` 与 `import x = require`
+   两种写法）、`node16+ESM`、`bundler` 在工作区实测夹具里 `tsc --noEmit --strict --skipLibCheck false`
+   **全部 exit 0**（命令与退出码见 `docs/WAVE-C-closeout.md` 与波次 D 的验收记录；`--skipLibCheck` 显式给 `false`，
+   即不靠消费者关掉库检查）。
+   ⚠️ **唯一的限制是 `moduleResolution: node10`（老 `node`）**：它**不读 `exports`**，所以
+   ① 只有**根入口** `deer-ui` 可用（靠根 `package.json` 的顶层 `types` / `main` 兜底，
+   两条都指 CJS 树；`deer-ui/kit` / `deer-ui/tabs` / `deer-ui/tooltip` 在 node10 下解析不到，实测 TS2307）；
+   ② 且需消费者开着 `esModuleInterop`（本库声明里 `react` 走默认导入，关掉会报 TS1259；实测：加
+   `--esModuleInterop` 后 node10 根入口 exit 0，不加则红）。用 `node16` / `nodenext` / `bundler` 没有这两条限制。
 
    ⚠️ **一个应用只用一种格式**：`tooltip` / `pcmode` 是模块级单例，CJS 与 ESM 各有一份实例，
    混用会让订阅表分裂、长按提示**静默消失**。**没有可靠的运行期自检**：两棵树的 `setKitPcMode`
@@ -133,7 +155,8 @@ import { TabBar, DropMenu } from "deer-ui/tabs";
 
 ## 组件清单
 
-四个 JS 子入口 + 一条 CSS 子路径（定义在 `package.json` 的 `exports`，`types` 条件排在 `import` 前）。
+四个 JS 子入口 + 一条 CSS 子路径（定义在 `package.json` 的 `exports`；`types` 是**两级对象**且排在
+`import` / `require` 之前 —— ESM 消费者拿 `.d.ts`、CJS 消费者拿 `.d.cts`）。
 下面每个入口的符号数都是 `tests/snapshots/barrel-exports.json` 里的**实测值**。
 
 ### `deer-ui/kit` — 25 个值 + 6 个类型
@@ -169,12 +192,16 @@ import { TabBar, DropMenu } from "deer-ui/tabs";
 
 | 树 | 位置 | 内容 |
 |---|---|---|
-| ESM | `dist/*.js` + `dist/*.d.ts` | `exports` 的 `import` 条件指这里；类型声明只在这一棵 |
-| CJS | `dist/cjs/*.js` | `exports` 的 `require` 条件指这里 |
+| ESM | `dist/*.js` + `dist/*.d.ts` | `exports` 的 `import` 条件指这里 |
+| CJS | `dist/cjs/*.cjs` + `dist/cjs/*.d.cts` | `exports` 的 `require` 条件指这里；声明是**按格式**的 `.d.cts` |
 | 样式 | `dist/styles.css` | 两棵树共用这一份（不在 `dist/cjs/` 里重复） |
 
+`.cjs` / `.d.cts` 是**无条件**的 CJS（不靠作用域推断），由 `scripts/build-styles.mjs` 在构建收尾把第二遍 tsc 的
+`.js` / `.d.ts` 归一而成（含把两棵树里的相对说明符由 `./x.js` 改成 `./x.cjs`），收尾带一组守卫：
+漏归一、说明符没指向真实文件、两棵树的模块清单对不上，都会**指名到文件**地构建失败。
+（为什么不直接编 `.cts` 源：`.tsx` 源不能改名成 `.cts` —— JSX 在 `.cts` 里是语法错误，而 `.ctsx` 不是 TS 支持的扩展名。）
 两棵树各自带一份**作用域** `package.json`（`dist/package.json` = `{"type":"module"}`、
-`dist/cjs/package.json` = `{"type":"commonjs"}`），由 `scripts/build-styles.mjs` 在构建收尾时写出并确认进包。
+`dist/cjs/package.json` = `{"type":"commonjs"}`），同样由 `scripts/build-styles.mjs` 在构建收尾时写出并确认进包。
 根 `package.json` **有意不写 `type` 字段** —— 加了会把 `tests/.ts-out/*.js` 这批 CJS 产物当 ESM 炸掉。
 
 ### `deer-ui`（根入口）— 30 个值 + 9 个类型
@@ -235,7 +262,9 @@ npm ci                 # 按 package-lock.json 装依赖（CI 与本地首选）
 npm run typecheck      # tsc -p tsconfig.json --noEmit（src，strict: true）
                        #   && tsc -p tsconfig.examples.json（示范页，它不在 src 里）
 npm run build          # 两遍 tsc：ESM + .d.ts 进 dist/，CJS 进 dist/cjs/（逐文件，无 bundler）
-                       #   && node scripts/build-styles.mjs → dist/styles.css（打印字节数/规则数）
+                       #   && node scripts/build-styles.mjs → dist/styles.css
+                       #      + CJS 树扩展名归一（.js → .cjs、.d.ts → .d.cts，含相对说明符）
+                       #      + 两棵树的格式作用域 package.json
 npm test               # 编译 tests/ 到 tests/.ts-out 后运行；末两行是 assertions: 222 / ALL PASS
 npm run snapshot:barrel # 导出面**有意**变化时更新快照（必须连同提交信息一起说明）
 npm run check:dist     # 构建产物自检（CI 在 build 之后跑）
@@ -292,12 +321,12 @@ tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显
 | 项 | 现值 | 预算下限 | 说明 |
 |---|---|---|---|
 | `ui.*` 控件契约（DOM 契约 + 源码级 / 生命周期级判据） | **117** | **62** | 其中 62 条是从宿主逐字搬来的 DOM 契约（名字一条没改、条件一条没削），9 条是范围 B 三条已确认 bug 的回归断言与同族护栏，46 条是范围 C 为 12 个零断言符号（+ BUG-5 判据）补的直接断言 |
-| `kit.*` + `lib.*`（A0-1/2/3 + 测试基建 + 样式归属 + 预算闸门） | **105** | **72** | 库自己的判据与基建；范围 C 的 A0 加固新增 33 条（A0-2 13 + A0-1 说明符自检 5 + A0-3 CSS 15） |
-| **运行期断言合计**（= `npm test` 末行 `assertions:`） | **222** | **134** | 117 + 105 与 62 + 72；只许涨 |
+| `kit.*` + `lib.*`（A0-1/2/3 + 测试基建 + 样式归属 + 预算闸门） | **108** | **72** | 库自己的判据与基建；范围 C 的 A0 加固新增 33 条（A0-2 13 + A0-1 说明符自检 5 + A0-3 CSS 15）；波次 D 新增 3 条 `exports` 形状判据（并自另一份独立实现 `fix/exports-types-per-format`） |
+| **运行期断言合计**（= `npm test` 末行 `assertions:`） | **225** | **134** | 117 + 108 与 62 + 72；只许涨 |
 
 `tests/budget.test.ts` 钉的是**库自己的两个下限**（`ui.*` ≥ 62 与 `kit.*`+`lib.*` ≥ 72，**分开判** ——
 总数会掩盖「基建长胖、控件契约变少」）。下限**不跟着现值涨**：涨停的下限会在下一次正常加断言时逼人改闸门，
-也就失去了「只许涨」的告警意义（范围 B 134 → 143、范围 C 143 → 222，三道下限一处没动）。
+也就失去了「只许涨」的告警意义（范围 B 134 → 143、范围 C 143 → 222、波次 D 222 → **225**，三道下限一处没动）。
 
 ### 测试基建的三处有意选择
 
@@ -320,9 +349,10 @@ tests/snapshots/barrel-exports.json  ★ 导出面快照（改导出面必须显
 | 命令 | 结果 |
 |---|---|
 | `npm run typecheck` | exit 0（src strict + 示范页） |
-| `npm test` | `assertions: 222` / `ALL PASS`（预算下限 134 = 62 + 72，未动） |
-| `npm run build` | `dist/` **39 个文件**（ESM 树 + `dist/cjs/` CJS 树，两棵树各带作用域 `package.json`）；`styles.css` **17,790 B / 92 条规则** |
-| `npm run check:dist` | OK |
+| `npm test` | `assertions: 225` / `ALL PASS`（预算下限 134 = 62 + 72，未动） |
+| `npm run build` | `dist/` **51 个文件**（ESM 树 24 + CJS 树 24（`.cjs` + `.d.cts`）+ `styles.css` + 两棵树的 `package.json`）；`styles.css` **17,790 B / 92 条规则** |
+| `npm run check:dist` | OK（51 个产物文件 + 原生加载 30/25/2/3 + 判据自检 **11/11**） |
+| 消费者侧类型解析（波次 D 的 F1） | 4 入口 × {node16+CJS（`import` 与 `import x = require` 两种写法）、node16+ESM、bundler} = **16/16 `tsc --noEmit` exit 0**，且全部在 **`skipLibCheck: false`** 下（改造前 node16+CJS 报 TS1479 ×4、`import x = require` 报 TS1471 ×4） |
 | 原生加载 | `require('deer-ui')` → 30 个导出；`import('deer-ui')` → 30 个导出；`require('deer-ui/kit')` → 25；`deer-ui/tabs` → 2；`deer-ui/tooltip` → 3 |
 
 > 范围 C 的逐条完成项、证据等级（哪些结论只有一方证据、哪些经过独立验证）与下一轮入口见
@@ -358,20 +388,22 @@ CI 里**没有、也不需要**任何宿主仓库在场 —— 这正是「库�
   CJS 与 ESM 是两份实例，同一工程里混用同一子入口会让长按提示**静默消失**（无任何报错）。
   库侧**没有**运行时检测：先前写在这里的 `===` 自检式**恒为 `false`**（纯 CJS 宿主与纯 ESM 宿主
   实测都报警），已按实测删除，改成应用侧约束（一个工程只用一种格式 / 钉 `conditionNames`）。
-- **CJS 的 TypeScript 消费者拿不到类型**（范围 C 补审发现，**本轮未修**）：`exports` 的 `types` 条件
-  不区分模块格式，命中的是 ESM 树的 `.d.ts`，`dist/cjs/` 里没有 `.d.ts` / `.d.cts`。实测
-  node16 + CJS 工程 `import` → **TS1479**、`import x = require()` → **TS1471**、node10 → **TS2307**；
-  ESM / bundler 工程 exit 0。修法是加法（按格式分流 `types` + 补 `.d.cts`），但**必须同时放宽下面
-  那条 `check-dist` 判据**，否则改完过不了 `check:dist`。入口见
-  [`docs/WAVE-C-closeout.md`](docs/WAVE-C-closeout.md) §5.1。
-- **`check-dist` 的「`types` 必须排第一」判据挡住上面那条修法，且遇嵌套对象会崩**：
-  `scripts/check-dist.mjs:83-85` 只判 `Object.keys(cond)[0] !== "types"`（两级 `exports` 形状会被判失败）；
-  `:87-88` 对每个条件值直接 `path.join(libRoot, target)`，**没有字符串守卫** —— 注入一个对象值会
-  `TypeError`（脚本崩，不是判据红）。改法见 [`docs/WAVE-C-closeout.md`](docs/WAVE-C-closeout.md) §5.2
-  （与上一条**必须同一提交**）。
-- **`check-dist` 的两条判据偏弱**（范围 C 补审登记）：① CJS 树的相对 `require` 只认字面量
-  `require("./x.js")`，`require("./"+"primitives")` 这类拼接能全绿通过；② 「同入口 CJS/ESM 导出值一致」
-  比的是**排序后的名字集合**（`check-dist.mjs:193-194`），同名不同实现能过 —— 所以它**抓不到**单例分裂。
+- ~~CJS 的 TypeScript 消费者拿不到类型~~ **波次 D 已修（不再是缺口）**：`exports` 的 `types` 条件改成
+  **两级对象**（`{"import": "./dist/<x>.d.ts", "require": "./dist/cjs/<x>.d.cts"}`），CJS 树有了按格式的
+  `.d.cts` 声明，并补了根 `types` / `main` 兜底（只服务 node10）。四条消费者路径实测全绿：
+  四个入口 × {`node16+CJS`（`import` 与 `import x = require`）、`node16+ESM`、`bundler`} 在
+  `--strict --skipLibCheck false` 下 **全部 exit 0**（此前 node16+CJS 是 TS1479 / TS1471）。
+  仍然成立的**局部**限制：`moduleResolution: node10` 只支持根入口、且需 `esModuleInterop`
+  （原因见上文「三条硬要求」第 2 条）。
+- ~~`check-dist` 的「`types` 必须排第一」判据挡住 F1 的修法，且遇嵌套对象会崩~~ **波次 D 已修（不再是缺口）**：
+  判据 ① 现在是「`types` **必须存在**，且位置在 `import` / `require` **之前**」（允许它是两级对象、
+  允许不是第一个键），目标存在性**递归**检查，**非字符串叶子判 FAIL 而不是抛异常**；另加一条
+  「`types.require` 必须指向 `dist/cjs/**/*.d.cts`」把「拿 ESM 声明冒充」钉死。判据自带**自检**
+  （N1…N7 七个合成负例，每次 `check:dist` 都跑）：错位的 `types` 判红、目标形状放行、
+  `types: 123` 这类畸形叶子判红而不崩。
+- **`check-dist` 的两条判据偏弱**（范围 C 补审登记，波次 D **仍未修**）：① CJS 树的相对 `require` 只认字面量
+  `require("./x.cjs")`，`require("./"+"primitives")` 这类拼接能全绿通过；② 「同入口 CJS/ESM 导出值一致」
+  比的是**排序后的名字集合**，同名不同实现能过 —— 所以它**抓不到**单例分裂。
 - **无障碍只做了一半**：`Dialog` 有 `role="dialog"` + `aria-modal`，但**没有焦点陷阱、不开焦点、关闭后不归还焦点**；
   遮罩不是 portal；`TipHost` 的提示没有 `aria-live`。
 - **三端兼容（`file://` / 旧 WebView）只能静态守**：本机没有 Android 设备，不许以「已核」口吻写进度。

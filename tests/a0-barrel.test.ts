@@ -27,6 +27,10 @@ const nodeOs = require("os") as { tmpdir(): string };
 
 type Entry = { label: string; file: string | null; css?: boolean };
 
+/** `exports` 里一个 JS 子路径的「条件对」：`{ import: { types, default }, require: { types, default } }`。
+ *  非 JS 入口（`./styles.css`）仍是纯字符串，由 `kit.barrel.exports-shape-labels` 记成 `"string"`。 */
+type ExportPair = { import?: { types?: string; default?: string }; require?: { types?: string; default?: string } };
+
 /** 从 `package.json` 的 `exports` 反推每个子路径对应的**源文件**（dist 目标 → src 源）。
  *  `./styles.css` 这类**非 JS 入口**没有导出面可快照（它是一条 CSS 子路径），单独用一个标记表示，
  *  由 `kit.barrel.css-entry` 那条判据盯着 —— 不许把它悄悄塞进 JS 导出面快照里（那会让快照失真）。 */
@@ -38,7 +42,17 @@ function entryPoints(root: string): Entry[] {
   for (const label of Object.keys(map)) {
     if (label === "./package.json") continue;
     const cond = map[label];
-    const target = typeof cond === "string" ? cond : cond && (cond.import || cond.default);
+    // 取「ESM 侧的目标产物」。两种形状都要认：
+    //   ① **嵌套**（本库自波次 D 起，并自 `fix/exports-types-per-format`）：`{ import: { types, default }, require: { types, default } }`
+    //   ② **平铺**（波次 D 之前的形态）：`{ types, import, require }`
+    // 只认 `import` 侧是因为 `dist/` 是 ESM 树、`src/` 是它的源；CJS 树（`dist/cjs/`）是派生品，不进快照。
+    const esmBranch = cond && typeof cond === "object" ? (cond.import as unknown) : undefined;
+    const target =
+      typeof cond === "string" ? cond
+        : typeof esmBranch === "string" ? esmBranch
+          : esmBranch && typeof esmBranch === "object" ? ((esmBranch as { default?: unknown }).default as string | undefined)
+            : cond && typeof cond === "object" ? ((cond as { default?: unknown }).default as string | undefined)
+              : undefined;
     if (typeof target !== "string" || !target.endsWith(".js")) {
       out.push({ label, file: null, css: true });
       continue;
@@ -77,6 +91,59 @@ export function testA0Barrel(): void {
     "cssExports=" + JSON.stringify(cssEntries.map((e) => e.label))
       + '；exports["./styles.css"]=' + JSON.stringify(pkg.exports?.[stylesLabel])
       + "；src/styles 存在=" + fs.existsSync(path.join(root, "src", "styles")));
+
+  // `exports` 的**形状**判据（波次 D：并自另一份独立实现 `fix/exports-types-per-format` 的 3 条断言，
+  // 适配本库的 `.cjs` / `.d.cts` 扩展名对）。
+  //
+  // 为什么需要它：F1 的病根是「`types` 不按格式分流」——四个入口都指 ESM 树的 `.d.ts`，
+  // 于是 node16+CJS 消费者拿到一份被判成 ESM 的声明。快照判据盯的是**符号集合**，
+  // 盯不住「`types` 指到哪棵树」；这三条补上形状与目标存在性。
+  const pkgExports = pkg.exports && typeof pkg.exports === "object" ? pkg.exports : {};
+  const shape: Record<string, unknown> = {};
+  const pairProblems: string[] = [];
+  const typesProblems: string[] = [];
+  for (const label of Object.keys(pkgExports)) {
+    if (label === "./package.json") continue;
+    const cond = pkgExports[label];
+    if (typeof cond === "string") { shape[label] = "string"; continue; }
+    if (!cond || typeof cond !== "object") { pairProblems.push(label + " 的条件不是字符串也不是对象"); continue; }
+    const pair = cond as ExportPair;
+    const kind = (t?: string) => (t === undefined ? "缺失" : t.endsWith(".css") ? "css" : t.endsWith(".js") ? "js" : t.endsWith(".cjs") ? "cjs" : "非 js/css：" + t);
+    shape[label] = {
+      import: pair.import ? { types: kind(pair.import.types), default: kind(pair.import.default) } : "缺失",
+      require: pair.require ? { types: kind(pair.require.types), default: kind(pair.require.default) } : "缺失",
+    };
+    // 每个格式分支都必须「types + default」双全，且 types 排在 default 前（TS 按顺序匹配）
+    for (const [fmt, branch] of [["import", pair.import], ["require", pair.require]] as const) {
+      if (!branch) { pairProblems.push(label + " 少了 " + fmt + " 分支"); continue; }
+      const keys = Object.keys(branch);
+      if (branch.types === undefined) pairProblems.push(label + "." + fmt + " 少了 types");
+      if (branch.default === undefined) pairProblems.push(label + "." + fmt + " 少了 default");
+      if (branch.types !== undefined && keys.indexOf("types") > keys.indexOf("default")) {
+        pairProblems.push(label + "." + fmt + " 的 types 排在 default 之后（" + keys.join(",") + "）");
+      }
+    }
+    // types 目标必须真的在磁盘上，且**与 default 同树**（CJS 的 types 不许指回 ESM 树 —— 那正是旧病灶）
+    for (const [fmt, branch] of [["import", pair.import], ["require", pair.require]] as const) {
+      if (!branch || !branch.types || !branch.default) continue;
+      if (branch.default.endsWith(".css")) continue;   // 非 JS 入口（styles.css）没有声明可查
+      if (!fs.existsSync(path.join(root, branch.types))) typesProblems.push(fmt + "." + label + " 的 types 目标不存在：" + branch.types);
+      const wantTree = fmt === "require" ? "./dist/cjs/" : "./dist/";
+      const gotTree = branch.types.indexOf("./dist/cjs/") === 0 ? "./dist/cjs/" : "./dist/";
+      if (wantTree !== gotTree) typesProblems.push(fmt + "." + label + " 的 types 指到了另一棵树：" + branch.types);
+      // 同一个分支里 types 与 default 必须是同一个产物：`./dist/cjs/kit/index.cjs` ↔ `./dist/cjs/kit/index.d.cts`
+      if (branch.types.replace(/\.d\.cts$/, ".cjs").replace(/\.d\.ts$/, ".js") !== branch.default) {
+        typesProblems.push(fmt + "." + label + " 的 types 与 default 不是同一个产物：" + branch.types + " vs " + branch.default);
+      }
+    }
+  }
+  ok("kit.barrel.exports-nested-shape", pairProblems.length === 0,
+    pairProblems.join("；") || ("每个子路径都是 import/require × types/default：" + JSON.stringify(shape)));
+  ok("kit.barrel.exports-types-per-format", Object.keys(pkgExports).length >= 5 && typesProblems.length === 0,
+    typesProblems.join("；") || "两棵树各有自己那一份声明，types 目标都存在且与 default 同树");
+  eq("kit.barrel.exports-shape-labels",
+    Object.keys(shape).sort(),
+    [".", "./kit", "./styles.css", "./tabs", "./tooltip"]);
 
   const actual: Record<string, Surface> = {};
   for (const e of codeEntries) {

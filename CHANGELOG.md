@@ -9,18 +9,20 @@
 
 ## [Unreleased]
 
-`Unreleased` 里目前累积了**三段**工作（每段的口径与验收命令都有独立文档）：
+`Unreleased` 里目前累积了**四段**工作（每段的口径与验收命令都有独立文档）：
 
 | 段 | 内容 | 口径 / 记录 |
 |---|---|---|
 | 范围 A/B | 工程规范底座 + 三条已确认运行期 bug（BUG-1/2/3） | [`docs/REQUIREMENTS-freeze.md`](docs/REQUIREMENTS-freeze.md) |
 | 双格式产物 | ESM（`dist/`）+ CJS（`dist/cjs/`）两条原生加载路（提交 `032698d`；**当时未写 CHANGELOG，本文件这次补记**） | 下面「双格式产物（补记）」 |
 | 范围 C | 判据加固（A0-2 类型级 / 根并集 / A0-3 覆盖 CSS）+ 12 个零断言符号补齐 + BUG-5 判据 + 双格式补审 + 收尾 | [`docs/REQUIREMENTS-freeze-C.md`](docs/REQUIREMENTS-freeze-C.md)、[`docs/WAVE-C-closeout.md`](docs/WAVE-C-closeout.md) |
+| 波次 D | **F1**：CJS 的 TypeScript 消费者拿到按格式的类型（`.d.cts`）+ **F3**：`check-dist` 的 `exports` 判据放宽与崩溃修复 | [`docs/REQUIREMENTS-freeze-D.md`](docs/REQUIREMENTS-freeze-D.md)、[`docs/WAVE-D-closeout.md`](docs/WAVE-D-closeout.md) |
 
 > **计数口径**：下面每一段里写的 `assertions: N` / `dist/` 文件数都是**那一段落盘当时的实测值**。
-> **现值是 `assertions: 222`（= `ui.*` 117 + `kit.*`+`lib.*` 105）、`dist/` 39 个产物文件** ——
-> 以 README「断言台账与预算闸门」/「这个版本验证到了哪一步」与 `docs/WAVE-C-closeout.md` 为准。
-> **已冻结的 DOM 契约与公开导出面三段都没变**（每段各有「未变」一节）。
+> **现值是 `assertions: 225`（= `ui.*` 117 + `kit.*`+`lib.*` 108）、`dist/` **51** 个产物文件** ——
+> 以 README「断言台账与预算闸门」/「这个版本验证到了哪一步」、`docs/WAVE-C-closeout.md` 与
+> `docs/WAVE-D-closeout.md` 为准。
+> **已冻结的 DOM 契约与公开导出面四段都没变**（每段各有「未变」一节）。
 
 ### 修复
 
@@ -134,6 +136,79 @@
   **F2 本轮已修**（README 改成应用侧约束）；**F1 / F3 只登记**（要动 `package.json` / `scripts/**`，
   超出范围 C 的写权）。
 - **本轮不发版**：`version` 保持 `0.1.0`、`private: true`；没有新增任何依赖。
+
+### 波次 D：CJS 的 TypeScript 消费者拿到按格式的类型（F1）+ `check-dist` 判据放宽与崩溃修复（F3）
+
+> 口径与验收命令见 [`docs/REQUIREMENTS-freeze-D.md`](docs/REQUIREMENTS-freeze-D.md)；
+> 证据来源分栏（哪些亲跑、哪些引用）见 [`docs/WAVE-D-closeout.md`](docs/WAVE-D-closeout.md)。
+
+**F1（high，面向消费者）：CJS 的 TypeScript 消费者此前拿不到类型。**
+
+- **病根**：`exports` 的 `types` 条件**不区分模块格式** —— 四个入口命中的都是 ESM 树的
+  `./dist/*.d.ts`，而它被 `dist/package.json` 的 `"type": "module"` 判成 **ESM 声明**。
+  实测后果：node16 + **CJS** 工程 `import { Dialog } from "deer-ui/kit"` → **TS1479**；
+  `import kit = require("deer-ui/kit")` → **TS1471**；**node10** → **TS2307**；
+  而 node16 的 **ESM** 工程与 **bundler** 工程一直是 exit 0（所以这条只在 CJS 侧可见）。
+- **修法（加法，不回滚双格式）**：① CJS 那一遍构建**开声明**（`tsconfig.cjs.json`），
+  由 `scripts/build-styles.mjs` 收尾把产物机械归一成 **`.cjs`** + **`.d.cts`**
+  （相对说明符同步改 `.js → .cjs`）；② `exports` 的每个 JS 子入口改成**嵌套条件**
+  `{ import: { types, default }, require: { types, default } }`，CJS 那一支的 `types` 指
+  `dist/cjs/**/*.d.cts`；③ 补根 `package.json` 的顶层 `types` + `main`（都指 CJS 树）给 node10 兜底。
+- **为什么是 `.d.cts` 而不是 `dist/cjs/**/*.d.ts`**：`.d.cts` 把「这是 CommonJS 声明」写在**扩展名**里，
+  不依赖目录作用域；两种都能过，前者更显式，故取前者。
+- **为什么不做「`.cts` 源镜像」**（冻结文档 §6.1 的原始设想）：`.tsx` 源不能改名成 `.cts` ——
+  JSX 在 `.cts` 里是语法错误（实测 `TS1005`），而 `.ctsx` 不是 TS 支持的扩展名（实测 `TS6054` 列出了
+  全部合法扩展名）。本库 12 个模块里有 6 个是 `.tsx`（含公开入口 `tabs.tsx`），所以那条路物理上不可行；
+  改用「对**生成物**做机械归一」，目标形态与 §6.1 完全一致。
+- **真判据（不是「exports 形状看起来对」）**：4 入口 × {node16+CJS（`import` 与 `import x = require`）、
+  node16+ESM、bundler} = **16/16 `tsc --noEmit` exit 0，且全部在 `skipLibCheck: false` 下**。
+  改造前的对照是 TS1479 ×4 / TS1471 ×4。
+- **反向验证**（证明测的是真机制）：把 `require` 侧的 `types` 指回 ESM 树的 `.d.ts` →
+  CJS 夹具 **4/4 变红**（TS1479 + TS1541，`import x = require` 另报 TS1471 + TS1542）；
+  挪走 12 个 `.d.cts` → 4/4 红（TS7016）。`--traceResolution` 抓到 CJS 消费者命中
+  `Matched 'exports' condition 'types' → 'require' → Using 'exports' subpath '.' with target './dist/cjs/index.d.cts'`，
+  ESM 侧命中 `./dist/index.d.ts`。
+- **node10 的限制（如实写明，不夸大）**：只有**根入口**可用，且**需要 `esModuleInterop`**
+  （不加会报 TS1259，错在库自己的声明 `import React from "react"`，而 `src/**` 本波次冻结）；
+  **子路径（`deer-ui/kit` 等）在 node10 下不支持**（node10 不读 `exports`，实测在所有兜底形状下仍 TS2307）。
+  README 已写明这两条。
+
+**F3（medium）：`check-dist` 的 `types` 首位判据与 F1 互斥，且遇嵌套对象直接崩。**
+
+- **两个问题**：①「`types` 必须排在 `Object.keys(cond)[0]`」把 F1 唯一可行的嵌套形状**定义成失败**；
+  ② 对条件值直接 `path.join(libRoot, target)`，没有字符串守卫 → 遇到对象抛
+  `TypeError [ERR_INVALID_ARG_TYPE]: The "path" argument must be of type string. Received an instance of Object`
+  （**是脚本崩，不是判据红**）。
+- **改法**：判据放宽为「`types` 必须**存在**，且位置在 `import` / `require` **之前**（允许其值是对象）」；
+  对嵌套对象递归取值并逐一 `existsSync`；**非字符串叶子判 FAIL 而不是抛异常**。
+  同时**两种形状都认**（嵌套 + 平铺），因为自检样本里两种都有。
+- **没有变成「宽松化」**：常驻判据自检 **N1…N11（11/11）** 随每次 `check:dist` / `prepack` 跑 ——
+  平铺与嵌套两种目标形状放行，而「`types` 错位」「缺 `types`」「坏叶子」「用 ESM 树冒充 CJS 声明」
+  都判红。新增的 N8…N11 专测**嵌套**形状（否则新分支就是没被自检覆盖的）。
+- **按格式的落地判据**：`require` 侧的类型目标必须是 `dist/cjs/**/*.d.cts`，拿 ESM 树的 `.d.ts` 冒充即判红——
+  这条直接盯着 F1 的病根，两种形状各取各的 `require` 侧。
+
+**与另一份独立实现的关系（合并说明）**：远端分支 `fix/exports-types-per-format`（提交 `4e8553f` + `bfa94c8`，
+两次 CI 均 `success`）在 `master` 基础上**独立解决过同一对问题**，路线不同（它产 `dist/cjs/**/*.d.ts`、
+exports 为嵌套形状、只在 build 里加一遍 tsc；本波次产 `.d.cts` + `.cjs`、并做生成物归一）。
+**本波次以自己这条已过双门（独立验证 + 质量门）的实现为基线**，并入了那份实现的三个优点：
+① `exports` 的**嵌套条件形状**；② `tests/a0-barrel.test.ts` 的 **3 条 `exports` 形状判据**
+（`kit.barrel.exports-nested-shape` / `exports-types-per-format` / `exports-shape-labels`，
+本波次按 `.d.cts ↔ .cjs` 命名对做了适配）；③ 其安装路径修正
+（**git 依赖在 npm 11 上装不成**，把 tarball 提为第①路）。
+
+**未变（波次 D 的不变量，逐条实测）**
+
+- **DOM 契约未变**：`src/**` 本波次**零改动**（`git diff --exit-code -- src` 退出 0）；
+  公开类名 / 元素层级 / `role` / `aria-*` 一个字没动。
+- **公开导出面未变**：`tests/snapshots/barrel-exports.json` 逐字节未变；
+  符号数仍 `.` 30 值 + 9 类型 / `./kit` 25+6 / `./tabs` 2+2 / `./tooltip` 3+1。
+- **运行期行为未变**：`require('deer-ui')` 与 `import('deer-ui')` 各 **30** 个导出；
+  `deer-ui/kit` 25 / `tabs` 2 / `tooltip` 3；`dist/styles.css` 仍 **17,790 B / 92 条规则**。
+- **依赖面未变**：没有新增任何依赖，`dependencies` 仍为空。
+- **计数**：`assertions: 222 → 225`（`+3`，全部来自上面那三条 `exports` 判据；`ui.*` 一条未动）；
+  三道下限 `MIN_CONTRACT=62` / `MIN_INFRA=72` / `MIN_TOTAL=134` **一处未动**。
+- **产物数变了（有意）**：`dist/` 从 39 → **51** 个文件（CJS 树多了 12 份 `.d.cts`，且运行期扩展名变 `.cjs`）。
 
 ### 本轮登记但不实施（附解除条件）
 

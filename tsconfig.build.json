@@ -1,7 +1,8 @@
 {
   // 出 dist 用的配置：**双格式产物的第一趟**（ESM + `.d.ts`，落到 `dist/`）。
-  // 第二趟是 CJS（落到 `dist/cjs/`），由 `package.json` 的 `build` 脚本用 CLI 覆盖
-  // （`--module commonjs --moduleResolution node10 --outDir dist/cjs --declaration false`）——
+  // 第二趟是 CJS（落到 `dist/cjs/`，含按格式的 `.d.cts` 声明），配置在同目录的 `tsconfig.cjs.json`
+  // （`module: CommonJS` + `moduleResolution: Node10` + `declaration: true`），由 `package.json` 的
+  // `build` 脚本跑；产出的 `.js` / `.d.ts` 再由 `scripts/build-styles.mjs` 收尾归一成 `.cjs` / `.d.cts`。
   // 一份源码两遍 tsc，不引 bundler。
   //
   // **为什么这里写死 `module: ESNext` / `moduleResolution: Bundler`，而不是继承 tsconfig.json 的 NodeNext**：

@@ -36,10 +36,23 @@
  *
  * 范围 C 结束时（`ab051d0` 测试 + `c088878` 文档）实测现值：**222 = ui.* 117 + kit.*+lib.* 105**，
  * 范围 C 的增量 **+79 = kit.*+lib.* 33（A0-2 13 + A0-1 说明符自检 5 + A0-3 CSS 15）+ ui.* 46（12 个零断言符号补齐）**。
- * **三道下限一处未动**（冻结文档 INV-C6：`MIN_CONTRACT=62` / `MIN_INFRA=72` / `MIN_TOTAL=134`）。
  *
- * 数法：`npm test` 末尾打印 `assertions: N`；`tests/common.ts` 的 `byPrefix` 另给按前缀的构成。
- * 断言条数**只许涨**：要降就得改这里的下限，并在提交信息里写清为什么（别悄悄把闸门调松）。
+ * 波次 D（F1+F3：CJS 的 TS 消费者类型支持）结束时实测现值：**225 = ui.* 117 + kit.*+lib.* 108**，
+ * 增量 **+3**，全部来自 `tests/a0-barrel.test.ts` 的三条 `exports` 形状判据
+ * （`kit.barrel.exports-nested-shape` / `kit.barrel.exports-types-per-format` / `kit.barrel.exports-shape-labels`，
+ * 并自另一份独立实现 `fix/exports-types-per-format`；`ui.*` 一条未动）。
+ * **三道下限同样一处未动**（冻结文档 INV-C6：`MIN_CONTRACT=62` / `MIN_INFRA=72` / `MIN_TOTAL=134`）。
+ *
+ * ⚠️ **关于上面那些分解数字的口径（读之前先看这条）**：本仓库历史上在同一处反复写错分解
+ * ——「新增 7 条（2+2+4）」（自造）、「`ui-kit` 53 → 56 = +3」（**字面量**口径，不是运行时条数）、
+ * 以及「按段计数 62 → 65」（把 `ui-kit` 段的运行时条数算错了；实测那一段是 **72**：
+ * 源码 67 个 `ui.*` 字面量 + `ui.kit.export.*` 循环展开的 9 条 − 重复计入去重）。
+ * **唯一权威出处是 `npm test` 打印的 `[budget]` 构成行与末行 `assertions:`**；
+ * 上面写的分解仅供理解，**任何对不上 `[budget]` 行的分解都应以 `[budget]` 行为准**。
+ * 结论性的两个数只需记住：**现值 225 = ui.* 117 + kit.*+lib.* 108**；**三道下限 62 / 72 / 134 未动**。
+ * （历史订正与复现见 `docs/WAVE-C-closeout.md` §5.3 与 `docs/WAVE-D-closeout.md`。）
+ * 下面的下限按纪律**只钉原值、不跟着涨**（134 是下限，不是现值）：涨停的下限会在下一次
+ * 正常加测试时逼人改闸门，也就失去了「只许涨」的告警意义。
  *
  * 空仓（P0 源文件还没复制）时自动**待机**，只有一条 `lib.budget.p0-pending`。
  */

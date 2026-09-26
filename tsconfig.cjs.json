@@ -1,0 +1,34 @@
+{
+  // **双格式产物的第二趟**：`src/**` → `dist/cjs/**`，JS 与**声明**一起出（一个 `-p` 跑完）。
+  //   node scripts/tsc.mjs -p tsconfig.build.json   → ESM 树（dist/，含 .d.ts）
+  //   node scripts/tsc.mjs -p tsconfig.cjs.json     → CJS 树（dist/cjs/，含声明）← 本文件
+  //   node scripts/build-styles.mjs                 → 样式拼接 + CJS 扩展名归一 + 两棵树的格式作用域
+  //
+  // 为什么声明**必须**开（这是波次 D 的 F1）：`exports` 的 `types` 条件要按模块格式分流，
+  // CJS 消费者（`moduleResolution: node16` + CommonJS，或 `import x = require(...)`）拿到的必须是
+  // **按格式的 CJS 声明**。只给 ESM 树的 `.d.ts`，node16+CJS 消费者会报 TS1479 / TS1471，
+  // node10 报 TS2307（波次 D 之前就是这个状态）。
+  //
+  // 为什么这里不用 `--declaration false`（改造前的写法）：那正是让 CJS 树没有声明的原因。
+  //
+  // 为什么是 `CommonJS` + `Node10`：CJS 树的消费者是 Node 的 `require`（Node10 解析器不读 `exports`），
+  // 这条链与 ESM 树的后缀规则无关；tsc 从这里产出的相对说明符仍是 `./x.js` 形态，
+  // 由 `scripts/build-styles.mjs` 在收尾统一归一成 `./x.cjs`（并把产物扩展名改成 `.cjs` / 声明改成 `.d.cts`）。
+  //
+  // **为什么不做「`.cts` 源镜像」**（冻结文档 §6.1 的原始设想）：`.tsx` 源不能改名成 `.cts` ——
+  // JSX 在 `.cts` 里是语法错误（实测 `error TS1005: '>' expected`），而 `.ctsx` 不是 TS 支持的扩展名
+  // （实测 `error TS6054: File 'b.ctsx' has an unsupported extension. The only supported extensions are
+  // '.ts', '.tsx', '.d.ts', '.cts', '.d.cts', '.mts', '.d.mts'`）。本库 12 个模块里有 6 个是 `.tsx`
+  // （含公开入口 `tabs.tsx`），所以「源镜像」这条路走不通；改用「产出后对**生成物**做机械归一」，
+  // 目标形态（`.cjs` + `.d.cts` 的自洽 CJS 树）与冻结文档 §6.1 完全一致。
+  //
+  // `outDir` / `rootDir` / `include` 都沿用 tsconfig.build.json（`rootDir: src`、`include: ["src"]`），
+  // 只覆盖格式相关的三项。
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node10",
+    "outDir": "dist/cjs",
+    "declaration": true
+  }
+}
